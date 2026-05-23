@@ -1,0 +1,6 @@
+{
+  "name": "Prayer Companion",
+  "description": "An elegant, minimalist Islamic prayer companion featuring offline prayer schedules, location-based adhan alerts, a precise Qibla finder, Quran reading logs, and dynamic spiritual statistics tracking dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
