@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModelProvider
 import com.example.data.AppDatabase
 import com.example.data.PrayerRepository
@@ -36,7 +38,8 @@ class MainActivity : ComponentActivity() {
         val viewModel = ViewModelProvider(this, factory)[PrayerViewModel::class.java]
 
         setContent {
-            MyApplicationTheme {
+            val currentTheme by viewModel.currentThemeName.collectAsState()
+            MyApplicationTheme(themeName = currentTheme) {
                 PrayerCompanionApp(viewModel = viewModel)
             }
         }

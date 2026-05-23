@@ -44,6 +44,7 @@ import com.example.data.PrayerLog
 import com.example.data.QuranProgress
 import com.example.utils.PrayerTimeCalculator
 import com.example.viewmodel.PrayerViewModel
+import kotlinx.coroutines.delay
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -167,6 +168,7 @@ fun PrayersScreen(
     val label by viewModel.locationLabel.collectAsState()
     val quranEntries by viewModel.quranEntries.collectAsState()
     val allLogs by viewModel.allPrayerLogs.collectAsState()
+    val loggedInUser by viewModel.loggedInUser.collectAsState()
 
     var showConfigDialog by remember { mutableStateOf(false) }
     var tempLat by remember { mutableStateOf(viewModel.latitude.value.toString()) }
@@ -216,7 +218,8 @@ fun PrayersScreen(
                     )
                 }
             }
-            // User Avatar Box with border matching theme configuration (#49454F and #938F99)
+            // User Avatar Box with border matching theme configuration
+            val initials = if (loggedInUser.isNotEmpty()) loggedInUser.take(2).uppercase() else "JS"
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -228,12 +231,43 @@ fun PrayersScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "JS",
+                    text = initials,
                     color = Color(0xFFE6E1E5),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
             }
+        }
+
+        if (loggedInUser.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color(0xFFD4AF37),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "As-salamu alaykum, $loggedInUser",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = { viewModel.logout() },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("Sign Out", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -524,14 +558,19 @@ fun PrayersScreen(
                     }
 
                     if (name != "Sunrise") {
+                        val timePassed = isPrayerTimePassed(time, selectedDateStr)
                         IconButton(
                             onClick = {
                                 if (completed) {
                                     // Remove log
                                     viewModel.togglePrayer(name, false)
                                 } else {
-                                    // Open options log dialog immediately
-                                    logDialogState = name
+                                    if (timePassed) {
+                                        // Open options log dialog immediately
+                                        logDialogState = name
+                                    } else {
+                                        Toast.makeText(context, "Cannot log $name in advance! Locked until real time ($time).", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             },
                             modifier = Modifier
@@ -539,9 +578,21 @@ fun PrayersScreen(
                                 .testTag("checkbox_$name")
                         ) {
                             Icon(
-                                imageVector = if (completed) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                imageVector = if (completed) {
+                                    Icons.Default.CheckCircle
+                                } else if (!timePassed) {
+                                    Icons.Default.Lock
+                                } else {
+                                    Icons.Default.RadioButtonUnchecked
+                                },
                                 contentDescription = "Log $name",
-                                tint = if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                tint = if (completed) {
+                                    MaterialTheme.colorScheme.primary
+                                } else if (!timePassed) {
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                } else {
+                                    MaterialTheme.colorScheme.outline
+                                },
                                 modifier = Modifier.size(32.dp)
                             )
                         }
@@ -660,6 +711,57 @@ fun PrayersScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
+                    // Theme Selector Option
+                    Text(text = "App Theme Accent", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val currentTheme by viewModel.currentThemeName.collectAsState()
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "royal_purple" to "Royal Purple",
+                            "emerald_dusk" to "Islamic Emerald",
+                            "midnight_sapphire" to "Midnight Sapphire",
+                            "crimson_velvet" to "Crimson Velvet"
+                        ).forEach { (themeId, labelStr) ->
+                            FilterChip(
+                                selected = currentTheme == themeId,
+                                onClick = { viewModel.updateThemeName(themeId) },
+                                label = { Text(labelStr) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Indian Cities Quick Jump
+                    Text(text = "Quick India Georefs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            Triple(28.6139, 77.2090, "New Delhi"),
+                            Triple(19.0760, 72.8777, "Mumbai"),
+                            Triple(22.5726, 88.3639, "Kolkata"),
+                            Triple(13.0827, 80.2707, "Chennai"),
+                            Triple(17.3850, 78.4867, "Hyderabad"),
+                            Triple(12.9716, 77.5946, "Bangalore")
+                        ).forEach { (lat, lon, cityName) ->
+                            FilterChip(
+                                selected = viewModel.latitude.collectAsState().value == lat,
+                                onClick = {
+                                    tempLat = lat.toString()
+                                    tempLon = lon.toString()
+                                    viewModel.updateLocation(lat, lon, "$cityName, India")
+                                },
+                                label = { Text(cityName) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     // School Select
                     Text(text = "Asr Shadow School", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Row(
@@ -751,6 +853,26 @@ fun PrayersScreen(
                             Text("Apply")
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Noor Companion App • Developed by Afroj",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD4AF37)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "India Edition • Designed with ❤️ is offline and private",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
@@ -763,11 +885,11 @@ fun HorizontalDateSelector(selectedDateStr: String, onDateSelected: (String) -> 
     val formatDay = SimpleDateFormat("EEE", Locale.getDefault())
     val formatDateOnly = SimpleDateFormat("dd", Locale.getDefault())
     
-    // Generates a list of 7 dates (3 in past, today, 3 in future)
+    // Generates a list of 7 dates (6 in past, today)
     val dates = remember {
         val list = mutableListOf<Date>()
         val cal = Calendar.getInstance()
-        cal.add(Calendar.DATE, -3)
+        cal.add(Calendar.DATE, -6)
         for (i in 0..6) {
             list.add(cal.time)
             cal.add(Calendar.DATE, 1)
@@ -777,7 +899,7 @@ fun HorizontalDateSelector(selectedDateStr: String, onDateSelected: (String) -> 
 
     Column {
         Text(
-            text = "Offline Day Tracker",
+            text = "Real-Time Day Tracker",
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.primary,
@@ -1235,6 +1357,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                             tint = Color(0xFFD4AF37), // Burnished Gold
                             modifier = Modifier
                                 .size(48.dp)
+                                .rotate(-45f) // Correct Material icon offset so index points straight North at 0
                                 .testTag("qibla_compass_needle")
                         )
                         Spacer(modifier = Modifier.weight(1f))
@@ -1578,4 +1701,321 @@ private fun triggerFileShare(context: Context, backupFile: File) {
     } catch (e: Exception) {
         Toast.makeText(context, "Failure preparing secure export: ${e.message}", Toast.LENGTH_LONG).show()
     }
+}
+
+@Composable
+fun NoorAppLogo(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 100.dp) {
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.toPx()
+            val height = size.toPx()
+            
+            // Draw a glorious glowing circular background
+            drawCircle(
+                color = Color(0xFFD4AF37).copy(alpha = 0.15f),
+                radius = width * 0.45f
+            )
+            
+            // Outer crescent moon path
+            val moonPath = androidx.compose.ui.graphics.Path().apply {
+                val r = width * 0.35f
+                val cx = width * 0.48f
+                val cy = height * 0.5f
+                
+                addArc(
+                    androidx.compose.ui.geometry.Rect(cx - r, cy - r, cx + r, cy + r),
+                    -110f,
+                    220f
+                )
+                val innerR = r * 0.98f
+                val innerCx = cx + r * 0.38f
+                addArc(
+                    androidx.compose.ui.geometry.Rect(innerCx - innerR, cy - innerR, innerCx + innerR, cy + innerR),
+                    110f,
+                    -220f
+                )
+                close()
+            }
+            drawPath(
+                path = moonPath,
+                color = Color(0xFFD4AF37) // Golden Glow
+            )
+            
+            // Standard 8-point Islamic star in the inner curve
+            val starPath = androidx.compose.ui.graphics.Path().apply {
+                val cx = width * 0.65f
+                val cy = height * 0.45f
+                val r1 = width * 0.12f
+                val r2 = width * 0.05f
+                for (step in 0 until 8) {
+                    val angleRad1 = (step * 45) * Math.PI / 180.0
+                    val angleRad2 = (step * 45 + 22.5) * Math.PI / 180.0
+                    val p1x = cx + r1 * Math.cos(angleRad1)
+                    val p1y = cy + r1 * Math.sin(angleRad1)
+                    val p2x = cx + r2 * Math.cos(angleRad2)
+                    val p2y = cy + r2 * Math.sin(angleRad2)
+                    if (step == 0) {
+                        moveTo(p1x.toFloat(), p1y.toFloat())
+                    } else {
+                        lineTo(p1x.toFloat(), p1y.toFloat())
+                    }
+                    lineTo(p2x.toFloat(), p2y.toFloat())
+                }
+                close()
+            }
+            drawPath(
+                path = starPath,
+                color = Color(0xFFE5C158)
+            )
+        }
+    }
+}
+
+@Composable
+fun SplashScreen(onTimeout: () -> Unit) {
+    var progress by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val animationSteps = 100
+        for (i in 1..animationSteps) {
+            delay(20) // 20ms * 100 = 2 seconds
+            progress = i / 100f
+        }
+        delay(300)
+        onTimeout()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(24.dp)
+        ) {
+            NoorAppLogo(size = 140.dp)
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "NOOR",
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 4.sp
+            )
+            Text(
+                text = "Your Islamic Prayer Companion",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(48.dp))
+            Box(
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(progress)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
+            Spacer(modifier = Modifier.height(48.dp))
+            Text(
+                text = "Developed by Afroj",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFD4AF37),
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp
+            )
+            Text(
+                text = "Based in India Edition",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                fontWeight = FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+fun LoginSignupScreen(
+    viewModel: PrayerViewModel,
+    onAuthSuccess: () -> Unit
+) {
+    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isSignUpMode by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            NoorAppLogo(size = 90.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = if (isSignUpMode) "Create Account" else "Sign In to Noor",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Keep your spiritual journey aligned",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (isSignUpMode) {
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = { Text("Believer's Name") },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email Address") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    errorMsg?.let { msg ->
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = {
+                            if (email.isEmpty() || password.isEmpty() || (isSignUpMode && username.isEmpty())) {
+                                errorMsg = "Please fill in all fields."
+                                return@Button
+                            }
+                            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                errorMsg = "Please enter a valid email."
+                                return@Button
+                            }
+                            if (password.length < 4) {
+                                errorMsg = "Password must be at least 4 characters."
+                                return@Button
+                            }
+
+                            val activeUser = if (isSignUpMode) username else email.substringBefore("@").replaceFirstChar { it.uppercase() }
+                            viewModel.loginOrSignUp(activeUser, email)
+                            onAuthSuccess()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (isSignUpMode) "Register" else "Enter", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TextButton(onClick = {
+                        isSignUpMode = !isSignUpMode
+                        errorMsg = null
+                    }) {
+                        Text(
+                            text = if (isSignUpMode) "Already have an account? Sign In" else "New to Noor? Create Account",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = "Crafted with dedication by Afroj",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFD4AF37),
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+private fun isPrayerTimePassed(prayerTimeStr: String, selectedDateStr: String): Boolean {
+    val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    if (selectedDateStr < todayStr) return true
+    if (selectedDateStr > todayStr) return false
+    
+    try {
+        val cleanTime = prayerTimeStr.trim()
+        val parts = cleanTime.split(":")
+        if (parts.size >= 2) {
+            val hour = parts[0].toIntOrNull() ?: return true
+            val minute = parts[1].substringBefore(" ").toIntOrNull() ?: return true
+            
+            val now = Calendar.getInstance()
+            val currentHour = now.get(Calendar.HOUR_OF_DAY)
+            val currentMinute = now.get(Calendar.MINUTE)
+            
+            if (currentHour > hour) return true
+            if (currentHour == hour && currentMinute >= minute) return true
+            return false
+        }
+    } catch (e: Exception) {
+        return true
+    }
+    return true
 }

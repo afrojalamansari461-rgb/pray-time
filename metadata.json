@@ -1,6 +1,6 @@
 {
-  "name": "Prayer Companion",
-  "description": "An elegant, minimalist Islamic prayer companion featuring offline prayer schedules, location-based adhan alerts, a precise Qibla finder, Quran reading logs, and dynamic spiritual statistics tracking dashboards.",
+  "name": "Noor",
+  "description": "Noor is an elegant, premium Islamic prayer companion app designed for believers in India and around the world. Developed by Afroj, it features real-time offline prayer trackers, dynamic theme choice accents, instant India-wide location georeferencing, custom vector Qibla finder compass needles, and a beautiful secure onboarding portal.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

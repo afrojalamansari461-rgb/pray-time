@@ -42,9 +42,9 @@ class PrayerViewModel(
     private val prefs = context.getSharedPreferences("PrayerPrefs", Context.MODE_PRIVATE)
 
     // Location State
-    val latitude = MutableStateFlow(prefs.getFloat("latitude", 21.4225f).toDouble())
-    val longitude = MutableStateFlow(prefs.getFloat("longitude", 39.8262f).toDouble())
-    val locationLabel = MutableStateFlow(prefs.getString("location_label", "Mecca (Default)") ?: "Mecca (Default)")
+    val latitude = MutableStateFlow(prefs.getFloat("latitude", 28.6139f).toDouble())
+    val longitude = MutableStateFlow(prefs.getFloat("longitude", 77.2090f).toDouble())
+    val locationLabel = MutableStateFlow(prefs.getString("location_label", "New Delhi, India (Default)") ?: "New Delhi, India (Default)")
 
     // Settings
     val asrSchool = MutableStateFlow(
@@ -52,6 +52,43 @@ class PrayerViewModel(
     )
     val fajrAngle = MutableStateFlow(prefs.getFloat("fajr_angle", 18.0f).toDouble())
     val ishaAngle = MutableStateFlow(prefs.getFloat("isha_angle", 17.0f).toDouble())
+
+    // Theme Preference State (Defaulting to emerald_dusk)
+    val currentThemeName = MutableStateFlow(prefs.getString("selected_theme", "emerald_dusk") ?: "emerald_dusk")
+
+    fun updateThemeName(themeName: String) {
+        currentThemeName.value = themeName
+        prefs.edit().putString("selected_theme", themeName).apply()
+    }
+
+    // Authentication local state
+    val isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false))
+    val loggedInUser = MutableStateFlow(prefs.getString("logged_in_user", "") ?: "")
+    val loggedInEmail = MutableStateFlow(prefs.getString("logged_in_email", "") ?: "")
+
+    fun loginOrSignUp(username: String, email: String) {
+        prefs.edit().apply {
+            putBoolean("is_logged_in", true)
+            putString("logged_in_user", username)
+            putString("logged_in_email", email)
+            apply()
+        }
+        isLoggedIn.value = true
+        loggedInUser.value = username
+        loggedInEmail.value = email
+    }
+
+    fun logout() {
+        prefs.edit().apply {
+            putBoolean("is_logged_in", false)
+            putString("logged_in_user", "")
+            putString("logged_in_email", "")
+            apply()
+        }
+        isLoggedIn.value = false
+        loggedInUser.value = ""
+        loggedInEmail.value = ""
+    }
 
     // Date State
     private val _selectedDate = MutableStateFlow(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
