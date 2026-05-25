@@ -59,6 +59,7 @@ object Tabs {
     const val CALENDAR = "Calendar"
     const val QIBLA = "Qibla"
     const val STATS = "Statistics"
+    const val SETTINGS = "Settings"
 }
 
 private val SURAH_LIST = listOf(
@@ -70,6 +71,9 @@ private val SURAH_LIST = listOf(
 fun PrayerCompanionApp(viewModel: PrayerViewModel) {
     val context = LocalContext.current
     var currentTab by remember { mutableStateOf(Tabs.PRAYERS) }
+    
+    var showSplash by remember { mutableStateOf(true) }
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
 
     // Launcher for Location permissions
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -98,8 +102,13 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
         }
     }
 
-    Scaffold(
-        bottomBar = {
+    if (showSplash) {
+        SplashScreen(onTimeout = { showSplash = false })
+    } else if (!isLoggedIn) {
+        LoginSignupScreen(viewModel = viewModel, onAuthSuccess = {})
+    } else {
+        Scaffold(
+            bottomBar = {
             NavigationBar(
                 modifier = Modifier
                     .windowInsetsPadding(WindowInsets.navigationBars)
@@ -112,14 +121,15 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
                     Tabs.WISDOM to Icons.Default.AutoAwesome,
                     Tabs.CALENDAR to Icons.Default.CalendarMonth,
                     Tabs.QIBLA to Icons.Default.Explore,
-                    Tabs.STATS to Icons.Default.BarChart
+                    Tabs.STATS to Icons.Default.BarChart,
+                    Tabs.SETTINGS to Icons.Default.Settings
                 )
                 tabs.forEach { (tabName, icon) ->
                     NavigationBarItem(
                         selected = currentTab == tabName,
                         onClick = { currentTab = tabName },
                         icon = { Icon(icon, contentDescription = tabName) },
-                        label = { Text(tabName, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        label = { Text(tabName, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
                         modifier = Modifier.testTag("nav_item_${tabName.lowercase()}")
                     )
                 }
@@ -140,16 +150,19 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
                     viewModel = viewModel,
                     onNavigateToQibla = { currentTab = Tabs.QIBLA },
                     onNavigateToQuran = { currentTab = Tabs.QURAN },
-                    onNavigateToStats = { currentTab = Tabs.STATS }
+                    onNavigateToStats = { currentTab = Tabs.STATS },
+                    onNavigateToSettings = { currentTab = Tabs.SETTINGS }
                 )
                 Tabs.QURAN -> QuranScreen(viewModel)
                 Tabs.WISDOM -> HadithDuaScreen(viewModel)
                 Tabs.CALENDAR -> CalendarScreen(viewModel)
                 Tabs.QIBLA -> QiblaScreen(viewModel)
                 Tabs.STATS -> StatsScreen(viewModel)
+                Tabs.SETTINGS -> SettingsScreen(viewModel, onBack = { currentTab = Tabs.PRAYERS })
             }
         }
     }
+}
 }
 
 @Composable
@@ -157,7 +170,8 @@ fun PrayersScreen(
     viewModel: PrayerViewModel,
     onNavigateToQibla: () -> Unit,
     onNavigateToQuran: () -> Unit,
-    onNavigateToStats: () -> Unit
+    onNavigateToStats: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val times by viewModel.prayerTimes.collectAsState()
@@ -197,7 +211,7 @@ fun PrayersScreen(
                 Text(
                     text = "Noor",
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary, // #D0BCFF
                     letterSpacing = (-0.5).sp
                 )
@@ -212,30 +226,52 @@ fun PrayersScreen(
                             .background(Color(0xFF4CAF50)) // bg-green-500
                     )
                     Text(
-                        text = "$label (GPS Active)",
+                        text = "$label",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                 }
             }
-            // User Avatar Box with border matching theme configuration
-            val initials = if (loggedInUser.isNotEmpty()) loggedInUser.take(2).uppercase() else "JS"
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF49454F))
-                    .border(1.dp, Color(0xFF938F99), CircleShape)
-                    .clickable { showConfigDialog = true }
-                    .testTag("location_config_btn"),
-                contentAlignment = Alignment.Center
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = initials,
-                    color = Color(0xFFE6E1E5),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                // Beautiful Settings Quick Action Button
+                IconButton(
+                    onClick = onNavigateToSettings,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Open Settings",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // User Avatar Box with border matching theme configuration
+                val initials = if (loggedInUser.isNotEmpty()) loggedInUser.take(2).uppercase() else "JS"
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .clickable { onNavigateToSettings() }
+                        .testTag("location_config_btn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initials,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
             }
         }
 
@@ -484,6 +520,36 @@ fun PrayersScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- PRAYER TIMES LIST WITH CHECKLOGGERS ---
+        val fDelay by viewModel.fajrIqamahDelay.collectAsState()
+        val dDelay by viewModel.dhuhrIqamahDelay.collectAsState()
+        val aDelay by viewModel.asrIqamahDelay.collectAsState()
+        val mDelay by viewModel.maghribIqamahDelay.collectAsState()
+        val iDelay by viewModel.ishaIqamahDelay.collectAsState()
+
+        val delayForPrayer = mapOf(
+            "Fajr" to fDelay,
+            "Dhuhr" to dDelay,
+            "Asr" to aDelay,
+            "Maghrib" to mDelay,
+            "Isha" to iDelay
+        )
+
+        fun getIqamahTime(timeStr: String, delayMinutes: Int): String {
+            if (timeStr.isEmpty()) return ""
+            try {
+                val parts = timeStr.trim().split(":")
+                if (parts.size != 2) return ""
+                val hrs = parts[0].toIntOrNull() ?: return ""
+                val mins = parts[1].toIntOrNull() ?: return ""
+                val totalMinutes = (hrs * 60 + mins + delayMinutes + 1440) % 1440
+                val newHrs = totalMinutes / 60
+                val newMins = totalMinutes % 60
+                return String.format("%02d:%02d", newHrs, newMins)
+            } catch (e: Exception) {
+                return ""
+            }
+        }
+
         val prayers = listOf(
             "Fajr" to times.fajr,
             "Sunrise" to times.sunrise,
@@ -523,7 +589,7 @@ fun PrayersScreen(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = name,
+                                name,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = if (name == "Sunrise") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
@@ -552,9 +618,19 @@ fun PrayersScreen(
                         Text(
                             text = if (time.isNotEmpty()) time else "--:--",
                             style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (name != "Sunrise" && time.isNotEmpty()) {
+                            val delayMin = delayForPrayer[name] ?: 15
+                            val iqamahTime = getIqamahTime(time, delayMin)
+                            Text(
+                                text = "Queue/Jama'at: $iqamahTime (+$delayMin mins)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     if (name != "Sunrise") {
@@ -688,195 +764,8 @@ fun PrayersScreen(
         }
     }
 
-    // --- COORDINATES CONFIG DIALOG ---
-    if (showConfigDialog) {
-        Dialog(onDismissRequest = { showConfigDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp)
-                ) {
-                    Text(
-                        text = "Calculation Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
+    // Legacy config dialog removed in favor of first-class Settings tab screen
 
-                    // Theme Selector Option
-                    Text(text = "App Theme Accent", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val currentTheme by viewModel.currentThemeName.collectAsState()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            "royal_purple" to "Royal Purple",
-                            "emerald_dusk" to "Islamic Emerald",
-                            "midnight_sapphire" to "Midnight Sapphire",
-                            "crimson_velvet" to "Crimson Velvet"
-                        ).forEach { (themeId, labelStr) ->
-                            FilterChip(
-                                selected = currentTheme == themeId,
-                                onClick = { viewModel.updateThemeName(themeId) },
-                                label = { Text(labelStr) }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Indian Cities Quick Jump
-                    Text(text = "Quick India Georefs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            Triple(28.6139, 77.2090, "New Delhi"),
-                            Triple(19.0760, 72.8777, "Mumbai"),
-                            Triple(22.5726, 88.3639, "Kolkata"),
-                            Triple(13.0827, 80.2707, "Chennai"),
-                            Triple(17.3850, 78.4867, "Hyderabad"),
-                            Triple(12.9716, 77.5946, "Bangalore")
-                        ).forEach { (lat, lon, cityName) ->
-                            FilterChip(
-                                selected = viewModel.latitude.collectAsState().value == lat,
-                                onClick = {
-                                    tempLat = lat.toString()
-                                    tempLon = lon.toString()
-                                    viewModel.updateLocation(lat, lon, "$cityName, India")
-                                },
-                                label = { Text(cityName) }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // School Select
-                    Text(text = "Asr Shadow School", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            PrayerTimeCalculator.AsrSchool.STANDARD to "Shafi'i/Standard",
-                            PrayerTimeCalculator.AsrSchool.HANAFI to "Hanafi"
-                        ).forEach { (school, labelStr) ->
-                            FilterChip(
-                                selected = activeSchool == school,
-                                onClick = { viewModel.updateAsrSchool(school) },
-                                label = { Text(labelStr) }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(text = "Georeference Inputs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = tempLat,
-                        onValueChange = { tempLat = it },
-                        label = { Text("Latitude") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = tempLon,
-                        onValueChange = { tempLon = it },
-                        label = { Text("Longitude") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(text = "Astronomical Angles", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = tempFajrAngle,
-                        onValueChange = { tempFajrAngle = it },
-                        label = { Text("Fajr Angle (default 18°)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = tempIshaAngle,
-                        onValueChange = { tempIshaAngle = it },
-                        label = { Text("Isha Angle (default 17°)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            viewModel.fetchGPSLocation(context)
-                            tempLat = viewModel.latitude.value.toString()
-                            tempLon = viewModel.longitude.value.toString()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Icon(Icons.Default.MyLocation, contentDescription = "GPS")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Detect Current GPS")
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        TextButton(onClick = { showConfigDialog = false }) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                val latDouble = tempLat.toDoubleOrNull() ?: viewModel.latitude.value
-                                val lonDouble = tempLon.toDoubleOrNull() ?: viewModel.longitude.value
-                                val fAngle = tempFajrAngle.toDoubleOrNull() ?: viewModel.fajrAngle.value
-                                val iAngle = tempIshaAngle.toDoubleOrNull() ?: viewModel.ishaAngle.value
-
-                                viewModel.updateCalculationAngles(fAngle, iAngle)
-                                viewModel.updateLocation(latDouble, lonDouble, "Manual Geo Override")
-                                showConfigDialog = false
-                            },
-                            modifier = Modifier.testTag("apply_settings_btn")
-                        ) {
-                            Text("Apply")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Noor Companion App • Developed by Afroj",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFD4AF37)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "India Edition • Designed with ❤️ is offline and private",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -2019,3 +1908,524 @@ private fun isPrayerTimePassed(prayerTimeStr: String, selectedDateStr: String): 
     }
     return true
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val currentTheme by viewModel.currentThemeName.collectAsState()
+    val activeSchool by viewModel.asrSchool.collectAsState()
+    val latitude by viewModel.latitude.collectAsState()
+    val longitude by viewModel.longitude.collectAsState()
+    val fajrAngle by viewModel.fajrAngle.collectAsState()
+    val ishaAngle by viewModel.ishaAngle.collectAsState()
+
+    var tempLat by remember(latitude) { mutableStateOf(latitude.toString()) }
+    var tempLon by remember(longitude) { mutableStateOf(longitude.toString()) }
+    var tempFajrAngle by remember(fajrAngle) { mutableStateOf(fajrAngle.toString()) }
+    var tempIshaAngle by remember(ishaAngle) { mutableStateOf(ishaAngle.toString()) }
+
+    val fDelay by viewModel.fajrIqamahDelay.collectAsState()
+    val dDelay by viewModel.dhuhrIqamahDelay.collectAsState()
+    val aDelay by viewModel.asrIqamahDelay.collectAsState()
+    val mDelay by viewModel.maghribIqamahDelay.collectAsState()
+    val iDelay by viewModel.ishaIqamahDelay.collectAsState()
+
+    val fOff by viewModel.fajrOffset.collectAsState()
+    val sOff by viewModel.sunriseOffset.collectAsState()
+    val dOff by viewModel.dhuhrOffset.collectAsState()
+    val aOff by viewModel.asrOffset.collectAsState()
+    val mOff by viewModel.maghribOffset.collectAsState()
+    val iOff by viewModel.ishaOffset.collectAsState()
+
+    val loggedInUser by viewModel.loggedInUser.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // --- HEADER ROW ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = "Noor Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Configure calculations, theme accents & timings",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // --- 1. THEME CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Palette, contentDescription = "Theme Icon", tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "App Color Accents",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        Triple("royal_purple", "Royal Purple", Color(0xFFBB86FC)),
+                        Triple("emerald_dusk", "Islamic Emerald", Color(0xFF00E676)),
+                        Triple("midnight_sapphire", "Midnight Sapphire", Color(0xFF29B6F6)),
+                        Triple("crimson_velvet", "Crimson Velvet", Color(0xFFFF5252))
+                    ).forEach { (themeId, labelStr, themeColor) ->
+                        Box(
+                            modifier = Modifier
+                                .size(width = 115.dp, height = 50.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (currentTheme == themeId) themeColor.copy(alpha = 0.25f)
+                                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                                )
+                                .border(
+                                    2.dp,
+                                    if (currentTheme == themeId) themeColor else Color.Transparent,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.updateThemeName(themeId) }
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(themeColor)
+                                )
+                                Text(
+                                    text = labelStr.substringBefore(" "),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (currentTheme == themeId) themeColor else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2. ADHAN OFFSETS CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Tune, contentDescription = "Offsets Icon", tint = MaterialTheme.colorScheme.primary)
+                    Column {
+                        Text(
+                            text = "Calibrate Adhan Timings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Manually offset calculation results in minutes",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                listOf(
+                    "Fajr" to fOff,
+                    "Sunrise" to sOff,
+                    "Dhuhr" to dOff,
+                    "Asr" to aOff,
+                    "Maghrib" to mOff,
+                    "Isha" to iOff
+                ).forEach { item ->
+                    val pName = item.first
+                    val curVal = item.second
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(pName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { viewModel.updatePrayerOffset(pName, curVal - 1) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease $pName Offset", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Text(
+                                text = "${if (curVal > 0) "+" else ""}$curVal m",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(60.dp),
+                                textAlign = TextAlign.Center,
+                                color = if (curVal != 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            IconButton(
+                                onClick = { viewModel.updatePrayerOffset(pName, curVal + 1) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase $pName Offset", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 3. IQAMAH DELAYS CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Timer, contentDescription = "Queue Icon", tint = MaterialTheme.colorScheme.secondary)
+                    Column {
+                        Text(
+                            text = "Congregational Queue Delays",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Set congregational gap (minutes after Adhan) for countdowns",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                listOf(
+                    "Fajr" to fDelay,
+                    "Dhuhr" to dDelay,
+                    "Asr" to aDelay,
+                    "Maghrib" to mDelay,
+                    "Isha" to iDelay
+                ).forEach { item ->
+                    val pName = item.first
+                    val curVal = item.second
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("$pName Queue Time", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { viewModel.updateIqamahDelay(pName, maxOf(0, curVal - 1)) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease $pName Queue", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
+                            }
+                            Text(
+                                text = "$curVal m",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(60.dp),
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            IconButton(
+                                onClick = { viewModel.updateIqamahDelay(pName, curVal + 1) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase $pName Queue", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 4. GEO CONFIG CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.MyLocation, contentDescription = "Location Settings", tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "Georeferences & Calculation Method",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Indian Cities Quick Links
+                Text(text = "Quick India Georefs", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        Triple(28.6139, 77.2090, "New Delhi"),
+                        Triple(19.0760, 72.8777, "Mumbai"),
+                        Triple(22.5726, 88.3639, "Kolkata"),
+                        Triple(13.0827, 80.2707, "Chennai"),
+                        Triple(17.3850, 78.4867, "Hyderabad"),
+                        Triple(12.9716, 77.5946, "Bangalore")
+                    ).forEach { (lat, lon, cityName) ->
+                        FilterChip(
+                            selected = latitude == lat,
+                            onClick = {
+                                tempLat = lat.toString()
+                                tempLon = lon.toString()
+                                viewModel.updateLocation(lat, lon, "$cityName, India")
+                                Toast.makeText(context, "$cityName Georef Applied", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text(cityName) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Asr Shadow School Type selector
+                Text(text = "Asr Shadow School", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        PrayerTimeCalculator.AsrSchool.STANDARD to "Shafi'i/Standard",
+                        PrayerTimeCalculator.AsrSchool.HANAFI to "Hanafi"
+                    ).forEach { (school, labelStr) ->
+                        FilterChip(
+                            selected = activeSchool == school,
+                            onClick = { viewModel.updateAsrSchool(school) },
+                            label = { Text(labelStr) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Manual Coordinates Inputs
+                Text(text = "Manual Coordinate Override", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = tempLat,
+                    onValueChange = { tempLat = it },
+                    label = { Text("Latitude") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = tempLon,
+                    onValueChange = { tempLon = it },
+                    label = { Text("Longitude") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Astronomical shadow calculation angles
+                Text(text = "Astronomical Angles", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = tempFajrAngle,
+                    onValueChange = { tempFajrAngle = it },
+                    label = { Text("Fajr Angle (default 18°)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = tempIshaAngle,
+                    onValueChange = { tempIshaAngle = it },
+                    label = { Text("Isha Angle (default 17°)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Detect current GPS button
+                    Button(
+                        onClick = {
+                            viewModel.fetchGPSLocation(context)
+                            tempLat = viewModel.latitude.value.toString()
+                            tempLon = viewModel.longitude.value.toString()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ) {
+                        Icon(Icons.Default.MyLocation, contentDescription = "GPS icon", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Detect GPS", fontSize = 12.sp)
+                    }
+
+                    // Save / Apply manual references button
+                    Button(
+                        onClick = {
+                            val latDouble = tempLat.toDoubleOrNull() ?: latitude
+                            val lonDouble = tempLon.toDoubleOrNull() ?: longitude
+                            val fAngle = tempFajrAngle.toDoubleOrNull() ?: fajrAngle
+                            val iAngle = tempIshaAngle.toDoubleOrNull() ?: ishaAngle
+
+                            viewModel.updateCalculationAngles(fAngle, iAngle)
+                            viewModel.updateLocation(latDouble, lonDouble, "Manual Geo Override")
+                            Toast.makeText(context, "Calculation coordinates override success!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = "Save icon", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save & Apply", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // --- 5. LOGOUT / ACCOUNT CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile Settings", tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "User Profile Account",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val initials = if (loggedInUser.isNotEmpty()) loggedInUser.take(2).uppercase() else "JS"
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initials,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (loggedInUser.isNotEmpty()) loggedInUser else "Unregistered User",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Aptitude profile synchronization ready with offline log buffers",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (loggedInUser.isNotEmpty()) {
+                    Button(
+                        onClick = {
+                            viewModel.logout()
+                            Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Log out icon")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Disconnect Account ($loggedInUser)")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Text(
+            text = "Islamic Companion • Noor v1.3\nDevised with absolute reverence, 2026",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFD4AF37),
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+    }
+}
+

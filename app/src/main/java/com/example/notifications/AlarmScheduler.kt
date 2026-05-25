@@ -26,7 +26,15 @@ object AlarmScheduler {
         // Raw offset + DST offset in hours
         val tzOffset = (tz.rawOffset + tz.dstSavings).toDouble() / 3600000.0
 
-        val prayerTimes = PrayerTimeCalculator.calculate(
+        val prefs = context.getSharedPreferences("PrayerPrefs", Context.MODE_PRIVATE)
+        val fOff = prefs.getInt("fajr_offset", 0)
+        val sOff = prefs.getInt("sunrise_offset", 0)
+        val dOff = prefs.getInt("dhuhr_offset", 0)
+        val aOff = prefs.getInt("asr_offset", 0)
+        val mOff = prefs.getInt("maghrib_offset", 0)
+        val iOff = prefs.getInt("isha_offset", 0)
+
+        val baseTimes = PrayerTimeCalculator.calculate(
             latitude = latitude,
             longitude = longitude,
             timezoneOffset = tzOffset,
@@ -34,16 +42,32 @@ object AlarmScheduler {
             asrSchool = asrSchool
         )
 
+        fun adjustTime(timeStr: String, offsetMinutes: Int): String {
+            if (timeStr.isEmpty()) return ""
+            try {
+                val parts = timeStr.split(":")
+                if (parts.size != 2) return timeStr
+                val hrs = parts[0].toIntOrNull() ?: return timeStr
+                val mins = parts[1].toIntOrNull() ?: return timeStr
+                val totalMinutes = (hrs * 60 + mins + offsetMinutes + 1440) % 1440
+                val newHrs = totalMinutes / 60
+                val newMins = totalMinutes % 60
+                return String.format("%02d:%02d", newHrs, newMins)
+            } catch (e: Exception) {
+                return timeStr
+            }
+        }
+
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dateString = format.format(calendar.time)
 
-        // Maps prayer name to its HH:mm string format
+        // Maps prayer name to its HH:mm string format with user adjustments applied
         val list = listOf(
-            "Fajr" to prayerTimes.fajr,
-            "Dhuhr" to prayerTimes.dhuhr,
-            "Asr" to prayerTimes.asr,
-            "Maghrib" to prayerTimes.maghrib,
-            "Isha" to prayerTimes.isha
+            "Fajr" to adjustTime(baseTimes.fajr, fOff),
+            "Dhuhr" to adjustTime(baseTimes.dhuhr, dOff),
+            "Asr" to adjustTime(baseTimes.asr, aOff),
+            "Maghrib" to adjustTime(baseTimes.maghrib, mOff),
+            "Isha" to adjustTime(baseTimes.isha, iOff)
         )
 
         var scheduledPrayerName = ""
@@ -70,11 +94,11 @@ object AlarmScheduler {
                 asrSchool = asrSchool
             )
             scheduledPrayerName = "Fajr"
-            scheduledTimeMillis = parseTimeToMillis(tomorrowCalendar, tomorrowTimes.fajr)
+            val adjustedTomorrowFajr = adjustTime(tomorrowTimes.fajr, fOff)
+            scheduledTimeMillis = parseTimeToMillis(tomorrowCalendar, adjustedTomorrowFajr)
         }
 
         // Write to SharedPreferences so the UI knows which one is scheduled
-        val prefs = context.getSharedPreferences("PrayerPrefs", Context.MODE_PRIVATE)
         prefs.edit().apply {
             putFloat("latitude", latitude.toFloat())
             putFloat("longitude", longitude.toFloat())

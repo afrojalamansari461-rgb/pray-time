@@ -90,25 +90,95 @@ class PrayerViewModel(
         loggedInEmail.value = ""
     }
 
+    // Individual Prayer Offset Adjustments in minutes (+/-)
+    val fajrOffset = MutableStateFlow(prefs.getInt("fajr_offset", 0))
+    val sunriseOffset = MutableStateFlow(prefs.getInt("sunrise_offset", 0))
+    val dhuhrOffset = MutableStateFlow(prefs.getInt("dhuhr_offset", 0))
+    val asrOffset = MutableStateFlow(prefs.getInt("asr_offset", 0))
+    val maghribOffset = MutableStateFlow(prefs.getInt("maghrib_offset", 0))
+    val ishaOffset = MutableStateFlow(prefs.getInt("isha_offset", 0))
+
+    // Individual Prayer Iqamah (Queue Progress) Delays in minutes
+    val fajrIqamahDelay = MutableStateFlow(prefs.getInt("fajr_iqamah_delay", 15))
+    val dhuhrIqamahDelay = MutableStateFlow(prefs.getInt("dhuhr_iqamah_delay", 15))
+    val asrIqamahDelay = MutableStateFlow(prefs.getInt("asr_iqamah_delay", 15))
+    val maghribIqamahDelay = MutableStateFlow(prefs.getInt("maghrib_iqamah_delay", 10))
+    val ishaIqamahDelay = MutableStateFlow(prefs.getInt("isha_iqamah_delay", 15))
+
+    fun updatePrayerOffset(prayer: String, offset: Int) {
+        prefs.edit().putInt("${prayer.lowercase()}_offset", offset).apply()
+        when (prayer.lowercase()) {
+            "fajr" -> fajrOffset.value = offset
+            "sunrise" -> sunriseOffset.value = offset
+            "dhuhr" -> dhuhrOffset.value = offset
+            "asr" -> asrOffset.value = offset
+            "maghrib" -> maghribOffset.value = offset
+            "isha" -> ishaOffset.value = offset
+        }
+        // Force reschedule upcoming alarms so they follow the new offset
+        AlarmScheduler.scheduleNextPrayer(context, latitude.value, longitude.value, asrSchool.value)
+    }
+
+    fun updateIqamahDelay(prayer: String, delayMinutes: Int) {
+        prefs.edit().putInt("${prayer.lowercase()}_iqamah_delay", delayMinutes).apply()
+        when (prayer.lowercase()) {
+            "fajr" -> fajrIqamahDelay.value = delayMinutes
+            "dhuhr" -> dhuhrIqamahDelay.value = delayMinutes
+            "asr" -> asrIqamahDelay.value = delayMinutes
+            "maghrib" -> maghribIqamahDelay.value = delayMinutes
+            "isha" -> ishaIqamahDelay.value = delayMinutes
+        }
+    }
+
+    private fun adjustTime(timeStr: String, offsetMinutes: Int): String {
+        if (timeStr.isEmpty()) return ""
+        try {
+            val parts = timeStr.split(":")
+            if (parts.size != 2) return timeStr
+            val hrs = parts[0].toIntOrNull() ?: return timeStr
+            val mins = parts[1].toIntOrNull() ?: return timeStr
+            val totalMinutes = (hrs * 60 + mins + offsetMinutes + 1440) % 1440
+            val newHrs = totalMinutes / 60
+            val newMins = totalMinutes % 60
+            return String.format("%02d:%02d", newHrs, newMins)
+        } catch (e: Exception) {
+            return timeStr
+        }
+    }
+
     // Date State
     private val _selectedDate = MutableStateFlow(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
 
     // Calculated Prayer Times for Selected Date
     val prayerTimes = combine(
-        latitude,
-        longitude,
-        asrSchool,
-        _selectedDate,
-        fajrAngle,
-        ishaAngle
+        listOf(
+            latitude,
+            longitude,
+            asrSchool,
+            _selectedDate,
+            fajrAngle,
+            ishaAngle,
+            fajrOffset,
+            sunriseOffset,
+            dhuhrOffset,
+            asrOffset,
+            maghribOffset,
+            ishaOffset
+        )
     ) { flowsArray ->
         val lat = flowsArray[0] as Double
         val lon = flowsArray[1] as Double
         val school = flowsArray[2] as PrayerTimeCalculator.AsrSchool
         val date = flowsArray[3] as String
-        val fajr = flowsArray[4] as Double
-        val isha = flowsArray[5] as Double
+        val fajrAngleVal = flowsArray[4] as Double
+        val ishaAngleVal = flowsArray[5] as Double
+        val fOff = flowsArray[6] as Int
+        val sOff = flowsArray[7] as Int
+        val dOff = flowsArray[8] as Int
+        val aOff = flowsArray[9] as Int
+        val mOff = flowsArray[10] as Int
+        val iOff = flowsArray[11] as Int
 
         val cal = Calendar.getInstance()
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -116,14 +186,23 @@ class PrayerViewModel(
         val tz = cal.timeZone
         val offset = (tz.rawOffset + tz.dstSavings).toDouble() / 3600000.0
 
-        PrayerTimeCalculator.calculate(
+        val baseTimes = PrayerTimeCalculator.calculate(
             latitude = lat,
             longitude = lon,
             timezoneOffset = offset,
             calendar = cal,
             asrSchool = school,
-            fajrAngle = fajr,
-            ishaAngle = isha
+            fajrAngle = fajrAngleVal,
+            ishaAngle = ishaAngleVal
+        )
+
+        PrayerTimeCalculator.PrayerTimes(
+            fajr = adjustTime(baseTimes.fajr, fOff),
+            sunrise = adjustTime(baseTimes.sunrise, sOff),
+            dhuhr = adjustTime(baseTimes.dhuhr, dOff),
+            asr = adjustTime(baseTimes.asr, aOff),
+            maghrib = adjustTime(baseTimes.maghrib, mOff),
+            isha = adjustTime(baseTimes.isha, iOff)
         )
     }.stateIn(
         scope = viewModelScope,
