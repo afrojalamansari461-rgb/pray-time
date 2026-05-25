@@ -864,6 +864,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
     var endAyah by remember { mutableStateOf("") }
     var readDuration by remember { mutableStateOf("") }
     var surahExpanded by remember { mutableStateOf(false) }
+    var isManualLog by remember { mutableStateOf(true) }
 
     // Live Reading Session Timer States
     var timerSeconds by remember { mutableStateOf(0) }
@@ -878,7 +879,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
         }
     }
 
-    // Calculator for statistics: calculate current streaks
+    // Calculator for statistics
     val quranCount = progressEntries.size
     val totalTime = progressEntries.sumOf { it.durationMinutes }
 
@@ -1044,6 +1045,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                     // Use & Log
                     Button(
                         onClick = {
+                            isManualLog = false
                             val elapsedMins = maxOf(1, timerSeconds / 60)
                             readDuration = elapsedMins.toString()
                             showAddDialog = true
@@ -1074,7 +1076,8 @@ fun QuranScreen(viewModel: PrayerViewModel) {
         // --- BUTTON TO LOG NEW READING ---
         Button(
             onClick = { 
-                readDuration = "" // Clear to let user specify manually if clicked directly
+                isManualLog = true
+                readDuration = ""
                 showAddDialog = true 
             },
             modifier = Modifier
@@ -1156,7 +1159,11 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Ayah ${entry.startAyah} to ${entry.endAyah} • Read: ${entry.durationMinutes} mins",
+                                    text = if (entry.durationMinutes > 0) {
+                                        "Ayah ${entry.startAyah} to ${entry.endAyah} • Read: ${entry.durationMinutes} mins"
+                                    } else {
+                                        "Ayah ${entry.startAyah} to ${entry.endAyah}"
+                                    },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -1252,13 +1259,17 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
-                        value = readDuration,
-                        onValueChange = { readDuration = it },
-                        label = { Text("Read Duration (Minutes)") },
-                        modifier = Modifier.fillMaxWidth().testTag("input_duration")
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    if (isManualLog) {
+                        OutlinedTextField(
+                            value = readDuration,
+                            onValueChange = { readDuration = it },
+                            label = { Text("Read Duration (Minutes)") },
+                            modifier = Modifier.fillMaxWidth().testTag("input_duration")
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                    } else {
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1271,7 +1282,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                             onClick = {
                                 val sAyah = startAyah.toIntOrNull() ?: 1
                                 val eAyah = endAyah.toIntOrNull() ?: 1
-                                val duration = readDuration.toIntOrNull() ?: 10
+                                val duration = readDuration.toIntOrNull() ?: 0
 
                                 viewModel.addQuranProgress(
                                     surahName = selectedSurah,
@@ -1280,9 +1291,10 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                                     end = eAyah,
                                     duration = duration
                                 )
-                                // Shut down and reset timer upon successful log
-                                timerSeconds = 0
-                                timerRunning = false
+                                if (!isManualLog) {
+                                    timerSeconds = 0
+                                    timerRunning = false
+                                }
                                 showAddDialog = false
                             },
                             modifier = Modifier.testTag("submit_log_quran_btn")
@@ -1463,7 +1475,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                             .align(Alignment.TopCenter)
                             .padding(top = 16.dp)
                             .size(56.dp)
-                            .rotate(135f) // Rotated 135 deg so it points straight INWARDS to the center of the compass!
+                            .rotate(-45f) // Rotated -45 deg so physical arrow tip points straight OUTWARDS towards the Kaaba (West)!
                             .testTag("qibla_compass_needle")
                     )
                 }
