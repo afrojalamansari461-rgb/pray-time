@@ -351,16 +351,108 @@ class PrayerViewModel(
 
     @SuppressLint("MissingPermission")
     fun fetchGPSLocation(context: Context) {
-        val client = LocationServices.getFusedLocationProviderClient(context)
+        // Safe check for location permissions to avoid system security exceptions
+        val fineCheck = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        val coarseCheck = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (fineCheck != android.content.pm.PackageManager.PERMISSION_GRANTED && 
+            coarseCheck != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.w("PrayerViewModel", "GPS fetch skipped: permissions are not granted yet.")
+            return
+        }
+
+        // Co-prefer Platform LocationManager getLastKnownLocation first because it is 100% crash-proof,
+        // does not activate "MONITOR_LOCATION" active AppOps monitoring alerts at the platform level,
+        // and returns immediately using cached or mock coordinates.
         try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            if (locationManager != null) {
+                var bestLocation: Location? = null
+                
+                // Inspecting isProviderEnabled safely
+                val gpsEnabled = try { locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) } catch (t: Throwable) { false }
+                val networkEnabled = try { locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) } catch (t: Throwable) { false }
+
+                if (gpsEnabled) {
+                    bestLocation = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                }
+                if (bestLocation == null && networkEnabled) {
+                    bestLocation = locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+                }
+                if (bestLocation == null) {
+                    val passiveEnabled = try { locationManager.isProviderEnabled(android.location.LocationManager.PASSIVE_PROVIDER) } catch (t: Throwable) { false }
+                    if (passiveEnabled) {
+                        bestLocation = locationManager.getLastKnownLocation(android.location.LocationManager.PASSIVE_PROVIDER)
+                    }
+                }
+
+                if (bestLocation != null) {
+                    Log.d("PrayerViewModel", "LastKnownLocation fetched successfully: ${bestLocation.latitude}, ${bestLocation.longitude}")
+                    updateLocation(bestLocation.latitude, bestLocation.longitude, "GPS (System Cached)")
+                    return // Found, return instantly to avoid native play-services bindings
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e("PrayerViewModel", "Error fetching last known location: ${e.message}")
+        }
+
+        // Fallback: If last known locations are all null, carefully try play-services getCurrentLocation
+        try {
+            val client = LocationServices.getFusedLocationProviderClient(context)
             client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
                 .addOnSuccessListener { location: Location? ->
                     if (location != null) {
-                        updateLocation(location.latitude, location.longitude, "GPS Detected Location")
+                        updateLocation(location.latitude, location.longitude, "GPS (Fused)")
+                    } else {
+                        Log.d("PrayerViewModel", "Fused provider returned null. Falling back to active update.")
+                        fetchViaActiveLocationManager(context)
                     }
                 }
-        } catch (e: Exception) {
-            Log.e("PrayerViewModel", "Error requesting device location: ${e.message}")
+                .addOnFailureListener { e ->
+                    Log.e("PrayerViewModel", "Fused provider query failed, fallback: ${e.message}")
+                    fetchViaActiveLocationManager(context)
+                }
+        } catch (e: Throwable) {
+            Log.e("PrayerViewModel", "Fused location failed/unavailable (${e.javaClass.simpleName}): ${e.message}. Falling back.")
+            fetchViaActiveLocationManager(context)
+        }
+    }
+
+    private fun fetchViaActiveLocationManager(context: Context) {
+        try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            if (locationManager == null) {
+                Log.e("PrayerViewModel", "Platform LocationManager is not available.")
+                return
+            }
+
+            val isGpsEnabled = try { locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) } catch (t: Throwable) { false }
+            val isNetworkEnabled = try { locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) } catch (t: Throwable) { false }
+
+            var location: Location? = null
+            
+            @SuppressLint("MissingPermission")
+            if (isGpsEnabled) {
+                location = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+            }
+            
+            @SuppressLint("MissingPermission")
+            if (location == null && isNetworkEnabled) {
+                location = locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+            }
+
+            if (location != null) {
+                updateLocation(location.latitude, location.longitude, "GPS (System Provider)")
+            } else {
+                Log.e("PrayerViewModel", "All active System GPS providers returned null locations.")
+            }
+        } catch (e: Throwable) {
+            Log.e("PrayerViewModel", "System LocationManager active request fatal error: ${e.message}")
         }
     }
 
@@ -462,31 +554,54 @@ class PrayerViewModel(
 
     // Compass / Heading Logic from hardware sensors
     private fun setupSensors() {
-        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        if (rotationSensor != null) {
-            sensorManager?.registerListener(this, rotationSensor, SensorManager.SENSOR_DELAY_UI)
-        } else {
-            // Fallback: register Orientation sensor or accelerometer if rotation vector not available
-            val orientation = sensorManager?.getDefaultSensor(Sensor.TYPE_ORIENTATION)
-            sensorManager?.registerListener(this, orientation, SensorManager.SENSOR_DELAY_UI)
+        try {
+            sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            if (sensorManager == null) {
+                Log.w("PrayerViewModel", "SensorManager is not available on this device.")
+                return
+            }
+            val rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            if (rotationSensor != null) {
+                sensorManager?.registerListener(this, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+            } else {
+                // Fallback: register Orientation sensor if rotation vector is not available
+                val orientation = sensorManager?.getDefaultSensor(Sensor.TYPE_ORIENTATION)
+                if (orientation != null) {
+                    sensorManager?.registerListener(this, orientation, SensorManager.SENSOR_DELAY_UI)
+                } else {
+                    Log.w("PrayerViewModel", "Neither Rotation Vector nor Orientation sensor is available.")
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e("PrayerViewModel", "Error in setupSensors: ${e.message}")
         }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null) return
-        if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val rotationMatrix = FloatArray(9)
-            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-            val orientationValues = FloatArray(3)
-            SensorManager.getOrientation(rotationMatrix, orientationValues)
-            // azimuth: rotation around the Z axis
-            val azimuthRad = orientationValues[0]
-            val azimuthDeg = Math.toDegrees(azimuthRad.toDouble())
-            deviceHeading.value = azimuthDeg.toFloat()
-        } else if (event.sensor.type == Sensor.TYPE_ORIENTATION) {
-            val azimuthDeg = event.values[0]
-            deviceHeading.value = azimuthDeg
+        if (event == null || event.values == null) return
+        try {
+            if (event.sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
+                val values = event.values
+                if (values.isNotEmpty()) {
+                    val rotationMatrix = FloatArray(9)
+                    SensorManager.getRotationMatrixFromVector(rotationMatrix, values)
+                    val orientationValues = FloatArray(3)
+                    SensorManager.getOrientation(rotationMatrix, orientationValues)
+                    // azimuth: rotation around the Z axis
+                    val azimuthRad = orientationValues[0]
+                    val azimuthDeg = Math.toDegrees(azimuthRad.toDouble())
+                    deviceHeading.value = azimuthDeg.toFloat()
+                }
+            } else if (event.sensor.type == Sensor.TYPE_ORIENTATION) {
+                val values = event.values
+                if (values.isNotEmpty()) {
+                    val azimuthDeg = values[0]
+                    deviceHeading.value = azimuthDeg
+                }
+            }
+        } catch (e: Throwable) {
+            // Prevent background sensor callbacks from ever crashing the UI main thread
+            Log.e("PrayerViewModel", "Error in onSensorChanged: ${e.message}")
         }
     }
 

@@ -89,16 +89,18 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
         }
     }
 
-    // Trigger permission requests safely on startup if not already granted
-    LaunchedEffect(Unit) {
-        val fineCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-        val coarseCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (fineCheck != PackageManager.PERMISSION_GRANTED && coarseCheck != PackageManager.PERMISSION_GRANTED) {
-            locationPermissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-            )
-        } else {
-            viewModel.fetchGPSLocation(context)
+    // Trigger permission requests safely once user is logged in and splash layout has finished
+    LaunchedEffect(isLoggedIn, showSplash) {
+        if (!showSplash && isLoggedIn) {
+            val fineCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            val coarseCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (fineCheck != PackageManager.PERMISSION_GRANTED && coarseCheck != PackageManager.PERMISSION_GRANTED) {
+                locationPermissionLauncher.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                )
+            } else {
+                viewModel.fetchGPSLocation(context)
+            }
         }
     }
 
@@ -325,90 +327,100 @@ fun PrayersScreen(
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF49454F)),
-            border = BorderStroke(1.dp, Color(0xFF49454F))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Background Mosque Skyline & Celestial ornaments
+                MosqueDomeAndMinaretBackground(
+                    modifier = Modifier.matchParentSize(),
+                    primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                    drawStars = true
+                )
+
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "NEXT PRAYER",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Live",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
-                        text = "NEXT PRAYER",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFD0BCFF),
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 1.5.sp
+                        text = nextPrayerName,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFFD0BCFF))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Live",
-                            color = Color(0xFF381E72),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = nextPrayerName,
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = nextInfo.second,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFE6E1E5).copy(alpha = 0.82f),
-                    modifier = Modifier.testTag("prayer_countdown_timer")
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = if (nextPrayerTime.isNotEmpty()) nextPrayerTime else "--:--",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Light,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "ADHAN TIME",
-                            fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .height(36.dp)
-                            .width(1.dp)
-                            .background(Color(0xFF938F99).copy(alpha = 0.3f))
+                    Text(
+                        text = nextInfo.second,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.90f),
+                        modifier = Modifier.testTag("prayer_countdown_timer")
                     )
 
-                    Button(
-                        onClick = onNavigateToQibla,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFD0BCFF),
-                            contentColor = Color(0xFF381E72)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Qibla Finder", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Column {
+                            Text(
+                                text = if (nextPrayerTime.isNotEmpty()) nextPrayerTime else "--:--",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "ADHAN TIME",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        )
+
+                        Button(
+                            onClick = onNavigateToQibla,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Qibla Finder", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -1689,6 +1701,17 @@ fun SplashScreen(onTimeout: () -> Unit) {
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Grand decorative mosque silhouette standing tall at the bottom of the splash screen
+        MosqueDomeAndMinaretBackground(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .align(Alignment.BottomCenter),
+            primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f),
+            drawStars = false // Keep splash simple, let the logo contain the crescent
+        )
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -1785,12 +1808,12 @@ fun LoginSignupScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                shape = MihrabArchShape(0.12f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp, top = 48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (isSignUpMode) {
@@ -2428,4 +2451,197 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
         )
     }
 }
+
+// --- ISLAMIC GEOMETRIC AND ARCHITECTURAL MOTIFS ---
+
+/**
+ * Extension function to draw standard symmetrical onion mosque dome paths mathematically.
+ */
+fun androidx.compose.ui.graphics.Path.addOnionDome(
+    xStart: Float,
+    xEnd: Float,
+    yGround: Float,
+    yPeak: Float
+) {
+    val cx = (xStart + xEnd) / 2f
+    val domeW = xEnd - xStart
+    
+    // Bottom flare control points: starts curving inwards then bulge outwards
+    val yBulge = yPeak + (yGround - yPeak) * 0.45f
+    val xLeftBulge = xStart - domeW * 0.08f
+    val xRightBulge = xEnd + domeW * 0.08f
+    
+    // Begin path
+    moveTo(xStart, yGround)
+    // Bullet/onion curve up to left bulge
+    cubicTo(
+        xStart + domeW * 0.05f, yGround - (yGround - yBulge) * 0.4f,
+        xLeftBulge - domeW * 0.03f, yBulge + (yGround - yBulge) * 0.15f,
+        xLeftBulge, yBulge
+    )
+    // Flare inward and upward to the pointed crown
+    cubicTo(
+        xLeftBulge + domeW * 0.03f, yBulge - (yBulge - yPeak) * 0.45f,
+        cx - domeW * 0.12f, yPeak + (yBulge - yPeak) * 0.15f,
+        cx, yPeak
+    )
+    // Symmetrically do the right side back down to ground
+    cubicTo(
+        cx + domeW * 0.12f, yPeak + (yBulge - yPeak) * 0.15f,
+        xRightBulge - domeW * 0.03f, yBulge - (yBulge - yPeak) * 0.45f,
+        xRightBulge, yBulge
+    )
+    cubicTo(
+        xRightBulge + domeW * 0.03f, yBulge + (yGround - yBulge) * 0.15f,
+        xEnd - domeW * 0.05f, yGround - (yGround - yBulge) * 0.4f,
+        xEnd, yGround
+    )
+}
+
+@Composable
+fun MosqueDomeAndMinaretBackground(
+    modifier: Modifier = Modifier,
+    primaryColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+    secondaryColor: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+    drawStars: Boolean = true
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        // 1. Draw twinkling celestial stars if requested
+        if (drawStars) {
+            val stars = listOf(
+                Pair(w * 0.12f, h * 0.18f),
+                Pair(w * 0.22f, h * 0.12f),
+                Pair(w * 0.35f, h * 0.22f),
+                Pair(w * 0.60f, h * 0.1f),
+                Pair(w * 0.76f, h * 0.20f),
+                Pair(w * 0.88f, h * 0.14f)
+            )
+            for ((sx, sy) in stars) {
+                val starPath = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(sx, sy - 3.5f)
+                    quadraticTo(sx, sy, sx + 3.5f, sy)
+                    quadraticTo(sx, sy, sx, sy + 3.5f)
+                    quadraticTo(sx, sy, sx - 3.5f, sy)
+                    quadraticTo(sx, sy, sx, sy - 3.5f)
+                    close()
+                }
+                drawPath(starPath, color = Color.White.copy(alpha = 0.45f))
+            }
+
+            // Draw a glorious glowing crescent moon in the top right quadrant
+            val mcx = w * 0.84f
+            val mcy = h * 0.28f
+            val mr = 15f
+            val moonPath = androidx.compose.ui.graphics.Path().apply {
+                addArc(
+                    androidx.compose.ui.geometry.Rect(mcx - mr, mcy - mr, mcx + mr, mcy + mr),
+                    -120f,
+                    240f
+                )
+                addArc(
+                    androidx.compose.ui.geometry.Rect(mcx - mr * 0.5f, mcy - mr, mcx + mr * 1.5f, mcy + mr),
+                    120f,
+                    -240f
+                )
+                close()
+            }
+            drawPath(moonPath, color = Color(0xFFFFD4AF).copy(alpha = 0.55f))
+        }
+
+        // 2. Draw Mosque Skyline: Symmetrical layered onion domes & minarets
+        val bgDomePath = androidx.compose.ui.graphics.Path()
+        val bgCx = w * 0.5f
+        val bgYGround = h
+        val bgYPeak = h * 0.54f
+        val bgDomeW = w * 0.38f
+        
+        bgDomePath.addOnionDome(bgCx - bgDomeW / 2, bgCx + bgDomeW / 2, bgYGround, bgYPeak)
+        drawPath(bgDomePath, color = secondaryColor)
+
+        val fgDomePath = androidx.compose.ui.graphics.Path()
+        
+        // Left Minaret Tower
+        val mx1 = w * 0.08f
+        val mw1 = w * 0.055f
+        val mYGround = h
+        val mYPeak = h * 0.45f
+        fgDomePath.moveTo(mx1, mYGround)
+        fgDomePath.lineTo(mx1, mYPeak)
+        fgDomePath.lineTo(mx1 + mw1, mYPeak)
+        fgDomePath.lineTo(mx1 + mw1, mYGround)
+        fgDomePath.addOnionDome(mx1, mx1 + mw1, mYPeak, mYPeak - 12f)
+        
+        // Right Minaret Tower
+        val mx2 = w * 0.865f
+        fgDomePath.moveTo(mx2, mYGround)
+        fgDomePath.lineTo(mx2, mYPeak)
+        fgDomePath.lineTo(mx2 + mw1, mYPeak)
+        fgDomePath.lineTo(mx2 + mw1, mYGround)
+        fgDomePath.addOnionDome(mx2, mx2 + mw1, mYPeak, mYPeak - 12f)
+
+        // Main Pointed foreground dome
+        val fgCx = w * 0.5f
+        val fgYPeak = h * 0.60f
+        val fgDomeW = w * 0.33f
+        fgDomePath.addOnionDome(fgCx - fgDomeW / 2, fgCx + fgDomeW / 2, mYGround, fgYPeak)
+        
+        // Left small dome
+        val leftSmallCx = w * 0.28f
+        val leftSmallYPeak = h * 0.70f
+        val leftSmallDomeW = w * 0.18f
+        fgDomePath.addOnionDome(leftSmallCx - leftSmallDomeW/2, leftSmallCx + leftSmallDomeW/2, mYGround, leftSmallYPeak)
+
+        // Right small dome
+        val rightSmallCx = w * 0.72f
+        val rightSmallYPeak = h * 0.70f
+        val rightSmallDomeW = w * 0.18f
+        fgDomePath.addOnionDome(rightSmallCx - rightSmallDomeW/2, rightSmallCx + rightSmallDomeW/2, mYGround, rightSmallYPeak)
+
+        drawPath(fgDomePath, color = primaryColor)
+    }
+}
+
+/**
+ * Beautiful Mosque Mihrab pointed frame arch shape.
+ */
+class MihrabArchShape(private val archStartHeightPercent: Float = 0.28f) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline {
+        if (size.width <= 0f || size.height <= 0f) {
+            return androidx.compose.ui.graphics.Outline.Rectangle(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
+        }
+        val path = androidx.compose.ui.graphics.Path().apply {
+            val w = size.width
+            val h = size.height
+            val archY = h * archStartHeightPercent
+            
+            moveTo(0f, h)
+            lineTo(0f, archY)
+            
+            val cx = w / 2f
+            // Inward-to-outward curves meeting with pointed pinnacle at the apex
+            cubicTo(
+                0f, archY * 0.45f,
+                cx - w * 0.18f, 0f,
+                cx, 0f
+            )
+            cubicTo(
+                cx + w * 0.18f, 0f,
+                w, archY * 0.45f,
+                w, archY
+            )
+            lineTo(w, h)
+            close()
+        }
+        return androidx.compose.ui.graphics.Outline.Generic(path)
+    }
+}
+
 
