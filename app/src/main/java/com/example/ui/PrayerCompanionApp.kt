@@ -865,6 +865,19 @@ fun QuranScreen(viewModel: PrayerViewModel) {
     var readDuration by remember { mutableStateOf("") }
     var surahExpanded by remember { mutableStateOf(false) }
 
+    // Live Reading Session Timer States
+    var timerSeconds by remember { mutableStateOf(0) }
+    var timerRunning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(timerRunning) {
+        if (timerRunning) {
+            while (true) {
+                delay(1000L)
+                timerSeconds += 1
+            }
+        }
+    }
+
     // Calculator for statistics: calculate current streaks
     val quranCount = progressEntries.size
     val totalTime = progressEntries.sumOf { it.durationMinutes }
@@ -878,7 +891,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = 12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -920,18 +933,159 @@ fun QuranScreen(viewModel: PrayerViewModel) {
             }
         }
 
-        // --- BUTTON TO LOG NEW READING ---
-        Button(
-            onClick = { showAddDialog = true },
+        // --- LIVE READING TIMER STOPWATCH CARD (THE "NEAT TIMER" THING) ---
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
+                .padding(bottom = 12.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Live Quran Session",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = if (timerRunning) "Timer is ticking. Keep reading!" else "Start timer before you read.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    // Compute clean stopwatch format (H:M:S)
+                    val hrs = timerSeconds / 3600
+                    val mins = (timerSeconds % 3600) / 60
+                    val secs = timerSeconds % 60
+                    val formattedDuration = if (hrs > 0) {
+                        String.format("%02d:%02d:%02d", hrs, mins, secs)
+                    } else {
+                        String.format("%02d:%02d", mins, secs)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (timerRunning) {
+                            // Pulsing color dot to indicate progression state
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE91E63))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = formattedDuration,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = if (timerRunning) Color(0xFFD4AF37) else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Play/Pause Button
+                    Button(
+                        onClick = { timerRunning = !timerRunning },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (timerRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (timerRunning) "Pause" else "Start",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = if (timerRunning) "Pause" else "Start", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // Reset button
+                    OutlinedButton(
+                        onClick = {
+                            timerRunning = false
+                            timerSeconds = 0
+                        },
+                        modifier = Modifier.weight(0.9f).height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Reset",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Reset", fontSize = 11.sp)
+                    }
+
+                    // Use & Log
+                    Button(
+                        onClick = {
+                            val elapsedMins = maxOf(1, timerSeconds / 60)
+                            readDuration = elapsedMins.toString()
+                            showAddDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
+                        modifier = Modifier.weight(1.2f).height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Log with timer",
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Use & Log",
+                            fontSize = 11.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- BUTTON TO LOG NEW READING ---
+        Button(
+            onClick = { 
+                readDuration = "" // Clear to let user specify manually if clicked directly
+                showAddDialog = true 
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
                 .testTag("log_quran_btn"),
             shape = RoundedCornerShape(12.dp)
         ) {
             Icon(Icons.Default.Add, contentDescription = "Add")
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Log Daily Quran Progress", fontWeight = FontWeight.Bold)
+            Text("Log Quran Progress manually", fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1126,6 +1280,9 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                                     end = eAyah,
                                     duration = duration
                                 )
+                                // Shut down and reset timer upon successful log
+                                timerSeconds = 0
+                                timerRunning = false
                                 showAddDialog = false
                             },
                             modifier = Modifier.testTag("submit_log_quran_btn")
@@ -1141,8 +1298,24 @@ fun QuranScreen(viewModel: PrayerViewModel) {
 
 @Composable
 fun QiblaScreen(viewModel: PrayerViewModel) {
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        viewModel.registerCompassSensors(context)
+        onDispose {
+            viewModel.unregisterCompassSensors()
+        }
+    }
+
     val bearing by viewModel.kaabaBearing.collectAsState()
     val heading by viewModel.deviceHeading.collectAsState()
+
+    // Calculate dynamic shortest angular difference between device heading and Mecca bearing
+    val angleDiff = remember(heading, bearing) {
+        val diff = (bearing - heading + 180) % 360 - 180
+        if (diff < -180) diff + 360 else if (diff > 180) diff - 360 else diff
+    }
+    // Deemed aligned if within 5.0 degrees of accuracy
+    val isAligned = kotlin.math.abs(angleDiff) < 5.0
 
     Column(
         modifier = Modifier
@@ -1155,8 +1328,10 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isAligned) Color(0xFF1E3A1E) else MaterialTheme.colorScheme.surfaceVariant
+            ),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -1164,23 +1339,56 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                     text = "Qibla Direction",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (isAligned) Color(0xFF81C784) else MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Real-time spherical bearing is computed relative to True North based on your precise GPS coordinates.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isAligned) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // --- ALIGNMENT BADGE STATUS ---
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 12.dp)
+        ) {
+            if (isAligned) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Aligned",
+                    tint = Color(0xFF4CAF50),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "✦ ALIGNED WITH QIBLA ✦",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF4CAF50),
+                    letterSpacing = 1.2.sp
+                )
+            } else {
+                Text(
+                    text = "Slowly rotate your phone to align",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
         }
 
         // --- COMPASS GRAPHIC DRAW BLOCK ---
+        val borderColor = if (isAligned) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outlineVariant
+        val borderThickness = if (isAligned) 4.dp else 2.dp
+
         Box(
             modifier = Modifier
                 .size(280.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .border(borderThickness, borderColor, CircleShape)
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1201,7 +1409,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                         (center.y + radius * sin(angleRad)).toFloat()
                     )
                     drawLine(
-                        color = Color.Gray.copy(alpha = 0.5f),
+                        color = if (isAligned) Color(0xFF4CAF50).copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.5f),
                         start = start,
                         end = end,
                         strokeWidth = if (i % 90 == 0) 3.dp.toPx() else 1.5.dp.toPx()
@@ -1210,9 +1418,9 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
 
                 // Draw Compass ring
                 drawCircle(
-                    color = Color.Green.copy(alpha = 0.1f),
+                    color = if (isAligned) Color(0xFF4CAF50).copy(alpha = 0.25f) else Color.Green.copy(alpha = 0.1f),
                     radius = radius - 20,
-                    style = Stroke(width = 2.dp.toPx())
+                    style = Stroke(width = if (isAligned) 3.dp.toPx() else 2.dp.toPx())
                 )
             }
 
@@ -1229,7 +1437,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                     text = "N",
                     fontWeight = FontWeight.Black,
                     fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isAligned) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 4.dp)
@@ -1245,28 +1453,19 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                     modifier = Modifier
                         .fillMaxSize()
                         .rotate(bearing.toFloat()), // Turns arrow point direct to Mecca bearing
-                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxHeight()
-                    ) {
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Icon(
-                            Icons.Default.Navigation,
-                            contentDescription = "Qibla needle",
-                            tint = Color(0xFFD4AF37), // Burnished Gold
-                            modifier = Modifier
-                                .size(48.dp)
-                                .rotate(-45f) // Correct Material icon offset so index points straight North at 0
-                                .testTag("qibla_compass_needle")
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "🕋",
-                            fontSize = 22.sp
-                        )
-                    }
+                    // Golden Compass needle lies on the outer circumference, traveling to the precise Qibla position!
+                    Icon(
+                        Icons.Default.Navigation,
+                        contentDescription = "Qibla needle",
+                        tint = if (isAligned) Color(0xFF4CAF50) else Color(0xFFD4AF37), // Lit Green if aligned, otherwise Burnished Gold
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 16.dp)
+                            .size(56.dp)
+                            .rotate(135f) // Rotated 135 deg so it points straight INWARDS to the center of the compass!
+                            .testTag("qibla_compass_needle")
+                    )
                 }
             }
         }
@@ -1276,7 +1475,9 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
         // --- BEARING TEXT FEEDBACKS ---
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isAligned) Color(0xFF1B3821) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(

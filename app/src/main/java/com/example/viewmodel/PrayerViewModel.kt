@@ -270,7 +270,6 @@ class PrayerViewModel(
 
     init {
         startCountdown()
-        setupSensors()
     }
 
     fun selectDate(date: String) {
@@ -553,9 +552,9 @@ class PrayerViewModel(
     }
 
     // Compass / Heading Logic from hardware sensors
-    private fun setupSensors() {
+    fun registerCompassSensors(ctx: Context) {
         try {
-            sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
             if (sensorManager == null) {
                 Log.w("PrayerViewModel", "SensorManager is not available on this device.")
                 return
@@ -573,7 +572,15 @@ class PrayerViewModel(
                 }
             }
         } catch (e: Throwable) {
-            Log.e("PrayerViewModel", "Error in setupSensors: ${e.message}")
+            Log.e("PrayerViewModel", "Error in registerCompassSensors: ${e.message}")
+        }
+    }
+
+    fun unregisterCompassSensors() {
+        try {
+            sensorManager?.unregisterListener(this)
+        } catch (e: Throwable) {
+            Log.e("PrayerViewModel", "Error in unregisterCompassSensors: ${e.message}")
         }
     }
 

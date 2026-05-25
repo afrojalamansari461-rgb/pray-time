@@ -122,10 +122,26 @@ object AlarmScheduler {
         )
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        
+        val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                alarmManager.canScheduleExactAlarms()
+            } catch (e: Throwable) {
+                false
+            }
+        } else {
+            true
+        }
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (canScheduleExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    scheduledTimeMillis,
+                    pendingIntent
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     scheduledTimeMillis,
                     pendingIntent
@@ -138,15 +154,34 @@ object AlarmScheduler {
                 )
             }
             Log.d(TAG, "Scheduled alarm for $scheduledPrayerName at ${Date(scheduledTimeMillis)}")
-        } catch (e: SecurityException) {
-            // Under Android 13/14, SCHEDULE_EXACT_ALARM might require explicit user toggle or system permissions.
-            // Safe fallback is standard set() which preserves battery but triggers around the requested time.
-            alarmManager.set(
-                AlarmManager.RTC_WAKEUP,
-                scheduledTimeMillis,
-                pendingIntent
-            )
-            Log.e(TAG, "SecurityException: Exact alarms not allowed. Standard set used.", e)
+        } catch (e: Throwable) {
+            // Safe fallback if exact/inexact alarms are restricted or throw any exception
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        scheduledTimeMillis,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager.set(
+                        AlarmManager.RTC_WAKEUP,
+                        scheduledTimeMillis,
+                        pendingIntent
+                    )
+                }
+            } catch (ex: Throwable) {
+                try {
+                    alarmManager.set(
+                        AlarmManager.RTC_WAKEUP,
+                        scheduledTimeMillis,
+                        pendingIntent
+                    )
+                } catch (err: Throwable) {
+                    Log.e(TAG, "Failed to schedule alarm even with fallback: ${err.message}")
+                }
+            }
+            Log.w(TAG, "Exception handled - fell back to alternative alarm setting: ${e.message}")
         }
 
         // Also schedule daily general reminder at 9 PM (21:00) to log stats
@@ -154,34 +189,38 @@ object AlarmScheduler {
     }
 
     private fun scheduleDailyReminder(context: Context) {
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 21)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-        }
-        
-        if (calendar.timeInMillis < System.currentTimeMillis()) {
-            calendar.add(Calendar.DATE, 1)
-        }
+        try {
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 21)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+            }
+            
+            if (calendar.timeInMillis < System.currentTimeMillis()) {
+                calendar.add(Calendar.DATE, 1)
+            }
 
-        val intent = Intent(context, PrayerReceiver::class.java).apply {
-            putExtra("is_reminder", true)
+            val intent = Intent(context, PrayerReceiver::class.java).apply {
+                putExtra("is_reminder", true)
+            }
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                54321,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.setInexactRepeating(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                AlarmManager.INTERVAL_DAY,
+                pendingIntent
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error in scheduleDailyReminder: ${e.message}", e)
         }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            54321,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.setInexactRepeating(
-            AlarmManager.RTC_WAKEUP,
-            calendar.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pendingIntent
-        )
     }
 
     private fun parseTimeToMillis(dateCalendar: Calendar, timeStr: String): Long {
