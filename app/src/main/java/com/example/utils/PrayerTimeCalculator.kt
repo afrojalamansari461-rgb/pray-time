@@ -10,6 +10,7 @@ object PrayerTimeCalculator {
         val sunrise: String,
         val dhuhr: String,
         val asr: String,
+        val sunset: String,
         val maghrib: String,
         val isha: String
     )
@@ -101,6 +102,7 @@ object PrayerTimeCalculator {
             sunrise = formatMinutes(sunriseMinutes),
             dhuhr = formatMinutes(localTransitMinutes),
             asr = formatMinutes(asrMinutes),
+            sunset = formatMinutes(sunsetMinutes),
             maghrib = formatMinutes(maghribMinutes),
             isha = formatMinutes(ishaMinutes)
         )

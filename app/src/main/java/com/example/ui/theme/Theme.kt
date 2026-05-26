@@ -98,6 +98,57 @@ private val CrimsonColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF3B2E2E)
 )
 
+private val GoldenOasisColorScheme = darkColorScheme(
+    primary = Color(0xFFFFB74D),
+    onPrimary = Color(0xFF4D2C00),
+    primaryContainer = Color(0xFF704300),
+    onPrimaryContainer = Color(0xFFFFE0B2),
+    secondary = Color(0xFFFFCC80),
+    tertiary = Color(0xFFD4AF37),
+    background = Color(0xFF14110A),
+    surface = Color(0xFF221D12),
+    onBackground = Color(0xFFECE0D0),
+    onSurface = Color(0xFFECE0D0),
+    surfaceVariant = Color(0xFF3D3425),
+    onSurfaceVariant = Color(0xFFD5C4AC),
+    outline = Color(0xFF9E8E79),
+    outlineVariant = Color(0xFF3D3425)
+)
+
+private val RoseQuartzColorScheme = darkColorScheme(
+    primary = Color(0xFFF06292),
+    onPrimary = Color(0xFF5C0028),
+    primaryContainer = Color(0xFF880043),
+    onPrimaryContainer = Color(0xFFFFD1DF),
+    secondary = Color(0xFFF8BBD0),
+    tertiary = Color(0xFFD4AF37),
+    background = Color(0xFF120E10),
+    surface = Color(0xFF1E1519),
+    onBackground = Color(0xFFECE0E4),
+    onSurface = Color(0xFFECE0E4),
+    surfaceVariant = Color(0xFF3C2E34),
+    onSurfaceVariant = Color(0xFFD6C2C9),
+    outline = Color(0xFF9E8D93),
+    outlineVariant = Color(0xFF3C2E34)
+)
+
+private val AmberColorScheme = darkColorScheme(
+    primary = Color(0xFFFFB300),
+    onPrimary = Color(0xFF3E1F00),
+    primaryContainer = Color(0xFF5D2F00),
+    onPrimaryContainer = Color(0xFFFFE0B2),
+    secondary = Color(0xFFFFC107),
+    tertiary = Color(0xFFD4AF37),
+    background = Color(0xFF141008),
+    surface = Color(0xFF201B10),
+    onBackground = Color(0xFFEDE1CE),
+    onSurface = Color(0xFFEDE1CE),
+    surfaceVariant = Color(0xFF383120),
+    onSurfaceVariant = Color(0xFFCEBFA6),
+    outline = Color(0xFF9E8D72),
+    outlineVariant = Color(0xFF383120)
+)
+
 @Composable
 fun MyApplicationTheme(
   themeName: String = "royal_purple",
@@ -107,6 +158,9 @@ fun MyApplicationTheme(
     "emerald_dusk" -> EmeraldColorScheme
     "midnight_sapphire" -> SapphireColorScheme
     "crimson_velvet" -> CrimsonColorScheme
+    "golden_oasis" -> GoldenOasisColorScheme
+    "rose_quartz" -> RoseQuartzColorScheme
+    "amber_glow" -> AmberColorScheme
     else -> DarkColorScheme
   }
 

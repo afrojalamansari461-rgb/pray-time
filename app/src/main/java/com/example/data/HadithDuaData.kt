@@ -149,6 +149,158 @@ object HadithDuaData {
             transliteration = "Astaghfirullahal-'Azeemal-ladhi la ilaha illa Huwal-Hayyul-Qayyum wa atubu ilayh",
             translation = "I seek forgiveness from Allah the Almighty, besides Whom there is no God, the Living, the Sustainer, and I turn to Him.",
             occasion = "Seeking Help"
+        ),
+        DuaItem(
+            id = "dua_9",
+            title = "Dua upon Waking Up",
+            arabic = "الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ",
+            transliteration = "Alhamdu lillahil-ladhi ahyana ba'da ma amatana wa ilayhin-nushur",
+            translation = "All praise is for Allah who gave us life after having taken it from us, and unto Him is the resurrection.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_10",
+            title = "Dua before Entering Washroom",
+            arabic = "اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْخُبُثِ وَالْخَبَائِثِ",
+            transliteration = "Allahumma inni a'udhu bika minal-khubutha wal-khaba'ith",
+            translation = "O Allah, I seek refuge with You from all offensive and noxious things (evil spirits).",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_11",
+            title = "Dua after Leaving Washroom",
+            arabic = "غُفْرَانَكَ",
+            transliteration = "Ghufranak",
+            translation = "I seek Your forgiveness.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_12",
+            title = "Dua when Leaving House",
+            arabic = "بِسْمِ اللَّهِ ، تَوَكَّلْتُ عَلَى اللَّهِ ، وَلَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ",
+            transliteration = "Bismillahi tawakkaltu 'alallah, wa la hawla wa la quwwata illa billah",
+            translation = "In the name of Allah, I place my trust in Allah, and there is no might nor power except with Allah.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_13",
+            title = "Dua when Entering House",
+            arabic = "بِسْمِ اللَّهِ وَلَجْنَا، وَبِسْمِ اللَّهِ خَرَجْنَا، وَعَلَى اللَّهِ رَبِّنَا تَوَكَّلْنَا",
+            transliteration = "Bismillahi walajna, wa bismillahi kharajna, wa 'ala Allahi rabbina tawakkalna",
+            translation = "In the name of Allah we enter, in the name of Allah we leave, and upon Allah our Lord we rely.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_14",
+            title = "Dua when Entering Mosque",
+            arabic = "اللَّهُمَّ افْتَحْ لِي أَبْوَابَ رَحْمَتِكَ",
+            transliteration = "Allahummaf-tah li abwaba rahmatik",
+            translation = "O Allah, open for me the gates of Your mercy.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_15",
+            title = "Dua when Leaving Mosque",
+            arabic = "اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ فَضْلِكَ",
+            transliteration = "Allahumma inni as'aluka min fadlik",
+            translation = "O Allah, I ask You from Your favor.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_16",
+            title = "Dua before Sleeping",
+            arabic = "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
+            transliteration = "Bismika Allahumma amutu wa ahya",
+            translation = "In Your name, O Allah, I die and I live.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_17",
+            title = "Dua when Wearing Clothes",
+            arabic = "الْحَمْدُ لِلَّهِ الَّذِي كَسَانِي هَذَا الثَّوْبَ وَرَزَقَنِيهِ مِنْ غَيْرِ حَوْلٍ مِنِّي وَلَا قُوَّةٍ",
+            transliteration = "Alhamdu lillahil-ladhi kasani hadha-thawba wa razaqanihi min ghayri hawlim-minni wa la quwwatin",
+            translation = "Praise be to Allah who has clothed me with this garment and provided it for me without any might or power on my part.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_18",
+            title = "Dua after performing Wudu",
+            arabic = "أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ وَأَشْهَدُ أَنَّ مُحَمَّدًا عَبْدُهُ وَرَسُولُهُ",
+            transliteration = "Ashhadu an la ilaha illallahu wahdahu la sharika lahu wa ashhadu anna Muhammadan 'abduhu wa Rasuluhu",
+            translation = "I bear witness that there is no deity worthy of worship except Allah, alone without partner, and that Muhammad is His servant and Messenger.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_19",
+            title = "Dua after hearing the Adhan",
+            arabic = "اللَّهُمَّ رَبَّ هَذِهِ الدَّعْوَةِ التَّامَّةِ، وَالصَّلَاةِ الْقَائِمَةِ، آتِ مُحَمَّداً الْوَسِيلَةَ وَالْفَضِيلَةَ، وَابْعَثْهُ مَقَاماً مَحْمُوداً الَّذِي وَعَدْتَهُ",
+            transliteration = "Allahumma Rabba hadhihid-da'watit-tammah, was-salatil-qai'mah, ati Muhammadanil-wasilata wal-fadilah, wab'athhu maqamam-mahmudanil-ladhi wa'adtah",
+            translation = "O Allah, Lord of this perfect call and established prayer, grant Muhammad the intercession and favor, and raise him to the praised station which You have promised.",
+            occasion = "Morning & Evening"
+        ),
+        DuaItem(
+            id = "dua_20",
+            title = "Dua for Traveling",
+            arabic = "سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ وَإِنَّا إِلَى رَبِّنَا لَمُنْقَلِبُونَ",
+            transliteration = "Subhanal-ladhi sakhkhara lana hadha wa ma kunna lahu muqrineen, wa inna ila Rabbina lamunqaliboon",
+            translation = "Glory to Him Who has subjected this to us, whereas we were not able to have it, and surely to our Lord we are returning.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_21",
+            title = "Dua when Looking in the Mirror",
+            arabic = "اللَّهُمَّ أَنْتَ حَسَّنْتَ خَلْقِي فَحَسِّنْ خُلُقِي",
+            transliteration = "Allahumma Anta hassanta khalqi fa hassin khuluqi",
+            translation = "O Allah, just as You have made my physical appearance beautiful, make my character beautiful as well.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_22",
+            title = "Dua for Parents",
+            arabic = "رَّبِّ ارْحَمْهُمَا كَمَا رَبَّيَانِي صَغِيرًا",
+            transliteration = "Rabbir-hamhuma kama rabbayani sagheera",
+            translation = "My Lord, have mercy upon them [my parents] as they brought me up when I was small.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_23",
+            title = "Dua upon Sneezing",
+            arabic = "الْحَمْدُ لِلَّهِ",
+            transliteration = "Alhamdulillah",
+            translation = "All praise is for Allah.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_24",
+            title = "Dua upon hearing someone sneeze",
+            arabic = "يَرْحَمُكَ اللَّهُ",
+            transliteration = "Yarhamukallah",
+            translation = "May Allah have mercy on you.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_25",
+            title = "Dua for Seeking Well-being & Protection ('Afiyah)",
+            arabic = "اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي الدُّنْيَا وَالْآخِرَةِ",
+            transliteration = "Allahumma inni as'aluka-l-'afwa wa-l-'afiyata fid-dunya wal-akhirah",
+            translation = "O Allah, I ask You for forgiveness and safety/well-being in this world and the Hereafter.",
+            occasion = "Morning & Evening"
+        ),
+        DuaItem(
+            id = "dua_26",
+            title = "Dua when experiencing Distress or Anxiety",
+            arabic = "لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ",
+            transliteration = "La ilaha illa Anta subhanaka inni kuntu minaz-zalimeen",
+            translation = "There is no deity worthy of worship except You; exalted are You. Indeed, I have been of the wrongdoers.",
+            occasion = "Daily Life"
+        ),
+        DuaItem(
+            id = "dua_27",
+            title = "Dua for Protection from Evil and Harm",
+            arabic = "بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ",
+            transliteration = "Bismillahil-ladhi la yadurru ma'as-mihi shay'un fil-ardi wa la fis-sama'i wa Huwas-Sami'ul-'Aleem",
+            translation = "In the name of Allah, with Whose name nothing can cause harm on earth or in the heaven, and He is the All-Hearing, the All-Knowing.",
+            occasion = "Morning & Evening"
         )
     )
 }

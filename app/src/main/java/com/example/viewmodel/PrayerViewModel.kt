@@ -65,6 +65,7 @@ class PrayerViewModel(
     val isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", false))
     val loggedInUser = MutableStateFlow(prefs.getString("logged_in_user", "") ?: "")
     val loggedInEmail = MutableStateFlow(prefs.getString("logged_in_email", "") ?: "")
+    val loggedInAddress = MutableStateFlow(prefs.getString("logged_in_address", "") ?: "")
 
     fun loginOrSignUp(username: String, email: String) {
         prefs.edit().apply {
@@ -78,16 +79,103 @@ class PrayerViewModel(
         loggedInEmail.value = email
     }
 
+    fun signUpUser(username: String, email: String, passwordSecured: String, addressInput: String): Boolean {
+        val normalizedEmail = email.lowercase().trim()
+        if (prefs.getBoolean("reg_exists_$normalizedEmail", false)) {
+            return false // Already exists
+        }
+        prefs.edit().apply {
+            putBoolean("reg_exists_$normalizedEmail", true)
+            putString("reg_name_$normalizedEmail", username.trim())
+            putString("reg_pwd_$normalizedEmail", passwordSecured)
+            putString("reg_address_$normalizedEmail", addressInput.trim())
+            apply()
+        }
+        // Auto sign in on registration success
+        loginUser(normalizedEmail, passwordSecured)
+        return true
+    }
+
+    private fun geocodeAddressToCoordinates(address: String): Pair<Double, Double> {
+        val addr = address.lowercase().trim()
+        val cityCoordinates = listOf(
+            Triple(28.6139, 77.2090, "new delhi"),
+            Triple(28.6139, 77.2090, "delhi"),
+            Triple(19.0760, 72.8777, "mumbai"),
+            Triple(19.0760, 72.8777, "bombay"),
+            Triple(22.5726, 88.3639, "kolkata"),
+            Triple(22.5726, 88.3639, "calcutta"),
+            Triple(13.0827, 80.2707, "chennai"),
+            Triple(13.0827, 80.2707, "madras"),
+            Triple(17.3850, 78.4867, "hyderabad"),
+            Triple(12.9716, 77.5946, "bangalore"),
+            Triple(12.9716, 77.5946, "bengaluru"),
+            Triple(23.0225, 72.5714, "ahmedabad"),
+            Triple(18.5204, 73.8567, "pune"),
+            Triple(21.1702, 72.8311, "surat"),
+            Triple(26.8467, 80.9462, "lucknow"),
+            Triple(26.9124, 75.7873, "jaipur"),
+            Triple(25.5941, 85.1376, "patna"),
+            Triple(34.0837, 74.7973, "srinagar"),
+            Triple(22.3072, 73.1812, "vadodara"),
+            Triple(23.2599, 77.4126, "bhopal"),
+            Triple(21.1702, 72.8311, "surat"),
+            Triple(21.2514, 81.6296, "raipur"),
+            Triple(20.2961, 85.8245, "bhubaneswar")
+        )
+        for (item in cityCoordinates) {
+            if (addr.contains(item.third)) {
+                return Pair(item.first, item.second)
+            }
+        }
+        // Default fallback to New Delhi if unknown
+        return Pair(28.6139, 77.2090)
+    }
+
+    fun loginUser(email: String, passwordSecured: String): String? {
+        val normalizedEmail = email.lowercase().trim()
+        val exists = prefs.getBoolean("reg_exists_$normalizedEmail", false)
+        if (!exists) {
+            return "No account found. Check email or Create Account."
+        }
+        val storedPwd = prefs.getString("reg_pwd_$normalizedEmail", "") ?: ""
+        if (storedPwd != passwordSecured) {
+            return "Incorrect password."
+        }
+        val storedName = prefs.getString("reg_name_$normalizedEmail", "") ?: normalizedEmail.substringBefore("@")
+        val storedAddress = prefs.getString("reg_address_$normalizedEmail", "") ?: ""
+
+        prefs.edit().apply {
+            putBoolean("is_logged_in", true)
+            putString("logged_in_user", storedName)
+            putString("logged_in_email", normalizedEmail)
+            putString("logged_in_address", storedAddress)
+            apply()
+        }
+        isLoggedIn.value = true
+        loggedInUser.value = storedName
+        loggedInEmail.value = normalizedEmail
+        loggedInAddress.value = storedAddress
+
+        // Resolve the stored city address and update live coordinates
+        val (lat, lon) = geocodeAddressToCoordinates(storedAddress)
+        updateLocation(lat, lon, storedAddress)
+
+        return null // success
+    }
+
     fun logout() {
         prefs.edit().apply {
             putBoolean("is_logged_in", false)
             putString("logged_in_user", "")
             putString("logged_in_email", "")
+            putString("logged_in_address", "")
             apply()
         }
         isLoggedIn.value = false
         loggedInUser.value = ""
         loggedInEmail.value = ""
+        loggedInAddress.value = ""
     }
 
     // Individual Prayer Offset Adjustments in minutes (+/-)
@@ -104,6 +192,65 @@ class PrayerViewModel(
     val asrIqamahDelay = MutableStateFlow(prefs.getInt("asr_iqamah_delay", 15))
     val maghribIqamahDelay = MutableStateFlow(prefs.getInt("maghrib_iqamah_delay", 10))
     val ishaIqamahDelay = MutableStateFlow(prefs.getInt("isha_iqamah_delay", 15))
+
+    // Custom Set Time Overrides (Adhan)
+    val fajrOverrideAdhan = MutableStateFlow(prefs.getString("fajr_override_adhan", "") ?: "")
+    val dhuhrOverrideAdhan = MutableStateFlow(prefs.getString("dhuhr_override_adhan", "") ?: "")
+    val asrOverrideAdhan = MutableStateFlow(prefs.getString("asr_override_adhan", "") ?: "")
+    val maghribOverrideAdhan = MutableStateFlow(prefs.getString("maghrib_override_adhan", "") ?: "")
+    val ishaOverrideAdhan = MutableStateFlow(prefs.getString("isha_override_adhan", "") ?: "")
+
+    // Custom Set Time Overrides (Namaj/Iqamah)
+    val fajrOverrideNamaj = MutableStateFlow(prefs.getString("fajr_override_namaj", "") ?: "")
+    val dhuhrOverrideNamaj = MutableStateFlow(prefs.getString("dhuhr_override_namaj", "") ?: "")
+    val asrOverrideNamaj = MutableStateFlow(prefs.getString("asr_override_namaj", "") ?: "")
+    val maghribOverrideNamaj = MutableStateFlow(prefs.getString("maghrib_override_namaj", "") ?: "")
+    val ishaOverrideNamaj = MutableStateFlow(prefs.getString("isha_override_namaj", "") ?: "")
+
+    // Date/Overrides trigger to dynamically refresh flows and views
+    private val _overrideTrigger = MutableStateFlow(0)
+    val dateQueueTrigger = MutableStateFlow(0)
+
+    fun updateAdhanOverride(prayer: String, timeStr: String) {
+        val p = prayer.lowercase().trim()
+        prefs.edit().putString("${p}_override_adhan", timeStr).apply()
+        when (p) {
+            "fajr" -> fajrOverrideAdhan.value = timeStr
+            "dhuhr" -> dhuhrOverrideAdhan.value = timeStr
+            "asr" -> asrOverrideAdhan.value = timeStr
+            "maghrib" -> maghribOverrideAdhan.value = timeStr
+            "isha" -> ishaOverrideAdhan.value = timeStr
+        }
+        _overrideTrigger.value++
+    }
+
+    fun updateNamajOverride(prayer: String, timeStr: String) {
+        val p = prayer.lowercase().trim()
+        prefs.edit().putString("${p}_override_namaj", timeStr).apply()
+        when (p) {
+            "fajr" -> fajrOverrideNamaj.value = timeStr
+            "dhuhr" -> dhuhrOverrideNamaj.value = timeStr
+            "asr" -> asrOverrideNamaj.value = timeStr
+            "maghrib" -> maghribOverrideNamaj.value = timeStr
+            "isha" -> ishaOverrideNamaj.value = timeStr
+        }
+        _overrideTrigger.value++
+    }
+
+    fun getQueueDelayForPrayer(prayer: String, date: String): Int {
+        val key = "queue_delay_${date}_${prayer.lowercase().trim()}"
+        val standardDelay = prefs.getInt("${prayer.lowercase().trim()}_iqamah_delay", when(prayer.lowercase().trim()) {
+            "maghrib" -> 10
+            else -> 15
+        })
+        return prefs.getInt(key, standardDelay)
+    }
+
+    fun setQueueDelayForPrayer(prayer: String, date: String, delay: Int) {
+        val key = "queue_delay_${date}_${prayer.lowercase().trim()}"
+        prefs.edit().putInt(key, delay).apply()
+        dateQueueTrigger.value = dateQueueTrigger.value + 1
+    }
 
     fun updatePrayerOffset(prayer: String, offset: Int) {
         prefs.edit().putInt("${prayer.lowercase()}_offset", offset).apply()
@@ -164,7 +311,8 @@ class PrayerViewModel(
             dhuhrOffset,
             asrOffset,
             maghribOffset,
-            ishaOffset
+            ishaOffset,
+            _overrideTrigger
         )
     ) { flowsArray ->
         val lat = flowsArray[0] as Double
@@ -196,18 +344,25 @@ class PrayerViewModel(
             ishaAngle = ishaAngleVal
         )
 
+        val fTime = if (fajrOverrideAdhan.value.isNotEmpty()) fajrOverrideAdhan.value else adjustTime(baseTimes.fajr, fOff)
+        val dTime = if (dhuhrOverrideAdhan.value.isNotEmpty()) dhuhrOverrideAdhan.value else adjustTime(baseTimes.dhuhr, dOff)
+        val aTime = if (asrOverrideAdhan.value.isNotEmpty()) asrOverrideAdhan.value else adjustTime(baseTimes.asr, aOff)
+        val mTime = if (maghribOverrideAdhan.value.isNotEmpty()) maghribOverrideAdhan.value else adjustTime(baseTimes.maghrib, mOff)
+        val iTime = if (ishaOverrideAdhan.value.isNotEmpty()) ishaOverrideAdhan.value else adjustTime(baseTimes.isha, iOff)
+
         PrayerTimeCalculator.PrayerTimes(
-            fajr = adjustTime(baseTimes.fajr, fOff),
+            fajr = fTime,
             sunrise = adjustTime(baseTimes.sunrise, sOff),
-            dhuhr = adjustTime(baseTimes.dhuhr, dOff),
-            asr = adjustTime(baseTimes.asr, aOff),
-            maghrib = adjustTime(baseTimes.maghrib, mOff),
-            isha = adjustTime(baseTimes.isha, iOff)
+            dhuhr = dTime,
+            asr = aTime,
+            sunset = baseTimes.sunset,
+            maghrib = mTime,
+            isha = iTime
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PrayerTimeCalculator.PrayerTimes("", "", "", "", "", "")
+        initialValue = PrayerTimeCalculator.PrayerTimes("", "", "", "", "", "", "")
     )
 
     // Live countdown or indicator for the next prayer
@@ -276,35 +431,67 @@ class PrayerViewModel(
         _selectedDate.value = date
     }
 
-    // Toggle compilation / completion logs inside Room
+    // Toggle compilation / completion logs inside Room (backwards compatible wrapper)
     fun togglePrayer(prayerName: String, completed: Boolean, isCongregation: Boolean = false, isQada: Boolean = false) {
+        logPrayerState(prayerName, completed, isCongregation, isQada, delete = !completed)
+    }
+
+    fun logMissedPrayer(prayerName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val dateStr = _selectedDate.value
             val existing = todayLogs.value.find { it.prayerName == prayerName }
-            
             if (existing != null) {
-                if (!completed) {
-                    prayerRepo.deleteLog(dateStr, prayerName)
-                } else {
-                    prayerRepo.insertLog(
-                        existing.copy(
-                            completed = true,
-                            prayedInCongregation = isCongregation,
-                            isQada = isQada,
-                            timestamp = System.currentTimeMillis()
-                        )
+                prayerRepo.insertLog(
+                    existing.copy(
+                        completed = false,
+                        prayedInCongregation = false,
+                        isQada = false,
+                        timestamp = System.currentTimeMillis()
                     )
-                }
-            } else if (completed) {
+                )
+            } else {
                 prayerRepo.insertLog(
                     PrayerLog(
                         date = dateStr,
                         prayerName = prayerName,
-                        completed = true,
-                        prayedInCongregation = isCongregation,
-                        isQada = isQada
+                        completed = false,
+                        prayedInCongregation = false,
+                        isQada = false,
+                        timestamp = System.currentTimeMillis()
                     )
                 )
+            }
+        }
+    }
+
+    // Dynamic logger that supports Prayed, Missed/Not Prayed, or Unlogging
+    fun logPrayerState(prayerName: String, completed: Boolean, isCongregation: Boolean = false, isQada: Boolean = false, delete: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dateStr = _selectedDate.value
+            if (delete) {
+                prayerRepo.deleteLog(dateStr, prayerName)
+            } else {
+                val existing = todayLogs.value.find { it.prayerName == prayerName }
+                if (existing != null) {
+                    prayerRepo.insertLog(
+                        existing.copy(
+                            completed = completed,
+                            prayedInCongregation = if (completed) isCongregation else false,
+                            isQada = if (completed) isQada else false,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                } else {
+                    prayerRepo.insertLog(
+                        PrayerLog(
+                            date = dateStr,
+                            prayerName = prayerName,
+                            completed = completed,
+                            prayedInCongregation = if (completed) isCongregation else false,
+                            isQada = if (completed) isQada else false
+                        )
+                    )
+                }
             }
         }
     }

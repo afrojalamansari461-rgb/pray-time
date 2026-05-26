@@ -185,6 +185,7 @@ fun PrayersScreen(
     val quranEntries by viewModel.quranEntries.collectAsState()
     val allLogs by viewModel.allPrayerLogs.collectAsState()
     val loggedInUser by viewModel.loggedInUser.collectAsState()
+    val dateQueueTrigger by viewModel.dateQueueTrigger.collectAsState()
 
     var showConfigDialog by remember { mutableStateOf(false) }
     var tempLat by remember { mutableStateOf(viewModel.latitude.value.toString()) }
@@ -336,7 +337,7 @@ fun PrayersScreen(
                     modifier = Modifier.matchParentSize(),
                     primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                     secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
-                    drawStars = true
+                    prayerPhase = nextPrayerName
                 )
 
                 Column(modifier = Modifier.padding(24.dp)) {
@@ -567,6 +568,7 @@ fun PrayersScreen(
             "Sunrise" to times.sunrise,
             "Dhuhr" to times.dhuhr,
             "Asr" to times.asr,
+            "Sunset" to times.sunset,
             "Maghrib" to times.maghrib,
             "Isha" to times.isha
         )
@@ -574,6 +576,8 @@ fun PrayersScreen(
         prayers.forEach { (name, time) ->
             val log = todayLogs.find { it.prayerName == name }
             val completed = log?.completed ?: false
+            val isMissed = log != null && !log.completed
+            val isCelestial = name == "Sunrise" || name == "Sunset"
 
             Card(
                 modifier = Modifier
@@ -582,12 +586,14 @@ fun PrayersScreen(
                     .testTag("prayer_card_${name.lowercase()}"),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (completed) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    containerColor = if (completed) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.40f)
+                    else if (isMissed) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f)
                     else MaterialTheme.colorScheme.surface
                 ),
                 border = BorderStroke(
                     1.dp,
-                    if (completed) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    if (completed) MaterialTheme.colorScheme.primary.copy(alpha = 0.60f)
+                    else if (isMissed) MaterialTheme.colorScheme.error.copy(alpha = 0.60f)
                     else MaterialTheme.colorScheme.outlineVariant
                 )
             ) {
@@ -604,7 +610,7 @@ fun PrayersScreen(
                                 name,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (name == "Sunrise") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
+                                color = if (isCelestial) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f) else MaterialTheme.colorScheme.onSurface
                             )
                             if (log?.prayedInCongregation == true) {
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -626,6 +632,17 @@ fun PrayersScreen(
                                     )
                                 )
                             }
+                            if (isMissed) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = { Text("Missed", fontSize = 10.sp) },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.20f),
+                                        labelColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            }
                         }
                         Text(
                             text = if (time.isNotEmpty()) time else "--:--",
@@ -633,8 +650,11 @@ fun PrayersScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        if (name != "Sunrise" && time.isNotEmpty()) {
-                            val delayMin = delayForPrayer[name] ?: 15
+                        if (!isCelestial && time.isNotEmpty()) {
+                            // Automatically fetch the dynamic delay (either specific date delay or custom global standard delay)
+                            val delayMin = remember(name, selectedDateStr, dateQueueTrigger) {
+                                viewModel.getQueueDelayForPrayer(name, selectedDateStr)
+                            }
                             val iqamahTime = getIqamahTime(time, delayMin)
                             Text(
                                 text = "Queue/Jama'at: $iqamahTime (+$delayMin mins)",
@@ -645,12 +665,12 @@ fun PrayersScreen(
                         }
                     }
 
-                    if (name != "Sunrise") {
+                    if (!isCelestial) {
                         val timePassed = isPrayerTimePassed(time, selectedDateStr)
                         IconButton(
                             onClick = {
-                                if (completed) {
-                                    // Remove log
+                                if (log != null) {
+                                    // Reset log state if clicked again when already logged
                                     viewModel.togglePrayer(name, false)
                                 } else {
                                     if (timePassed) {
@@ -663,11 +683,13 @@ fun PrayersScreen(
                             },
                             modifier = Modifier
                                 .size(48.dp)
-                                .testTag("checkbox_$name")
+                                .testTag("checkbox_${name.lowercase()}")
                         ) {
                             Icon(
                                 imageVector = if (completed) {
                                     Icons.Default.CheckCircle
+                                } else if (isMissed) {
+                                    Icons.Default.Cancel
                                 } else if (!timePassed) {
                                     Icons.Default.Lock
                                 } else {
@@ -676,6 +698,8 @@ fun PrayersScreen(
                                 contentDescription = "Log $name",
                                 tint = if (completed) {
                                     MaterialTheme.colorScheme.primary
+                                } else if (isMissed) {
+                                    MaterialTheme.colorScheme.error
                                 } else if (!timePassed) {
                                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 } else {
@@ -686,9 +710,106 @@ fun PrayersScreen(
                         }
                     } else {
                         Icon(
-                            Icons.Default.WbSunny,
-                            contentDescription = "Sunrise",
-                            tint = Color(0xFFECC27E),
+                            imageVector = if (name == "Sunrise") Icons.Default.WbSunny else Icons.Default.WbTwilight,
+                            contentDescription = name,
+                            tint = if (name == "Sunrise") Color(0xFFECC27E) else Color(0xFFFF8A65),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- OPTIONAL / SUNNAH NAFILAH PRAYERS SECTION ---
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Star, contentDescription = "Sunnah Icon", tint = Color(0xFFD4AF37), modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Optional & Sunnah Prayers (Nafilah)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val optionalPrayers = listOf(
+            Triple("Tahajjud", "Tahajjud (Night Vigil): Last third of the night before Fajr", "02:00 - 04:30 AM"),
+            Triple("Ishraq", "Ishraq (Post-Sunrise): 15-20 minutes after Sunrise", "15m after Sunrise"),
+            Triple("Duha", "Duha (Forenoon): Morning prayer before midday transit", "08:30 - 11:30 AM"),
+            Triple("Awabin", "Awabin (Post-Maghrib): Sunset voluntary prayer", "Between Maghrib & Isha")
+        )
+
+        optionalPrayers.forEach { (optName, optDesc, optRecommendedTime) ->
+            val optLog = todayLogs.find { it.prayerName == optName }
+            val optCompleted = optLog?.completed ?: false
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp)
+                    .testTag("optional_prayer_card_${optName.lowercase()}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (optCompleted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f)
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (optCompleted) MaterialTheme.colorScheme.primary.copy(alpha = 0.50f)
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            optName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            optDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Recommended: $optRecommendedTime",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD4AF37)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (optCompleted) {
+                                viewModel.togglePrayer(optName, false)
+                            } else {
+                                // Instantly log optional prayers
+                                viewModel.togglePrayer(optName, true)
+                                Toast.makeText(context, "$optName Logged successfully!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (optCompleted) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = "Log $optName",
+                            tint = if (optCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -754,7 +875,16 @@ fun PrayersScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         TextButton(onClick = { logDialogState = null }) {
-                            Text("Cancel", color = MaterialTheme.colorScheme.error)
+                            Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(
+                            onClick = {
+                                viewModel.logMissedPrayer(name)
+                                logDialogState = null
+                            },
+                            modifier = Modifier.testTag("btn_log_not_prayed")
+                        ) {
+                            Text("Not Prayed", color = MaterialTheme.colorScheme.error)
                         }
                         Button(
                             onClick = {
@@ -768,7 +898,7 @@ fun PrayersScreen(
                             },
                             modifier = Modifier.testTag("btn_save_detailed_log")
                         ) {
-                            Text("Log Prayer")
+                            Text("Log Prayed")
                         }
                     }
                 }
@@ -853,6 +983,7 @@ fun HorizontalDateSelector(selectedDateStr: String, onDateSelected: (String) -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuranScreen(viewModel: PrayerViewModel) {
+    val context = LocalContext.current
     val progressEntries by viewModel.quranEntries.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
@@ -947,6 +1078,53 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                 modifier = Modifier.padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Inline Surah Selection directly in the timer card
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Active Surah:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Box {
+                        OutlinedButton(
+                            onClick = { surahExpanded = true },
+                            modifier = Modifier.testTag("timer_surah_dropdown_btn"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(text = "$surahNumber. $selectedSurah", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown", modifier = Modifier.size(16.dp))
+                        }
+                        DropdownMenu(
+                            expanded = surahExpanded,
+                            onDismissRequest = { surahExpanded = false },
+                            modifier = Modifier.heightIn(max = 240.dp)
+                        ) {
+                            SURAH_LIST.forEachIndexed { index, name ->
+                                DropdownMenuItem(
+                                    text = { Text("${index + 1}. $name") },
+                                    onClick = {
+                                        selectedSurah = name
+                                        surahNumber = index + 1
+                                        surahExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1042,28 +1220,37 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                         Text(text = "Reset", fontSize = 11.sp)
                     }
 
-                    // Use & Log
+                    // Auto-Log and Save button
                     Button(
                         onClick = {
-                            isManualLog = false
                             val elapsedMins = maxOf(1, timerSeconds / 60)
-                            readDuration = elapsedMins.toString()
-                            showAddDialog = true
+                            // AUTO-LOG INSTANTLY WITHOUT POPUP DIALOGS!
+                            viewModel.addQuranProgress(
+                                surahName = selectedSurah,
+                                surahNum = surahNumber,
+                                start = 1,
+                                end = 1,
+                                duration = elapsedMins
+                            )
+                            timerRunning = false
+                            timerSeconds = 0
+                            Toast.makeText(context, "Logged $elapsedMins mins of Surah $selectedSurah automatically!", Toast.LENGTH_LONG).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
-                        modifier = Modifier.weight(1.2f).height(40.dp),
+                        modifier = Modifier.weight(1.2f).height(40.dp).testTag("autolog_timer_btn"),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                        enabled = timerSeconds > 0
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
-                            contentDescription = "Log with timer",
+                            contentDescription = "Auto log",
                             tint = Color.Black,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Use & Log",
+                            text = "Auto-Log",
                             fontSize = 11.sp,
                             color = Color.Black,
                             fontWeight = FontWeight.Bold
@@ -1167,8 +1354,15 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.outline
                                 )
+                                val formattedLogTime = remember(entry.timestamp, entry.date) {
+                                    try {
+                                        SimpleDateFormat("yyyy-MM-dd 'at' h:mm a", Locale.getDefault()).format(Date(entry.timestamp))
+                                    } catch (e: Exception) {
+                                        entry.date
+                                    }
+                                }
                                 Text(
-                                    text = "Logged: ${entry.date}",
+                                    text = "Logged: $formattedLogTime",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
@@ -1268,7 +1462,30 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                     } else {
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Timer,
+                                    contentDescription = "Timer Icon",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Auto logged session: $readDuration min(s)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
                     }
 
                     Row(
@@ -1824,53 +2041,97 @@ fun NoorAppLogo(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.toPx()
-            val height = size.toPx()
+            val w = size.toPx()
+            val h = size.toPx()
+            val cx = w / 2f
+            val cy = h / 2f
             
-            // Draw a glorious glowing circular background
+            // Outer glowing ring
             drawCircle(
-                color = Color(0xFFD4AF37).copy(alpha = 0.15f),
-                radius = width * 0.45f
+                color = Color(0xFFD4AF37).copy(alpha = 0.08f),
+                radius = w * 0.48f,
+                center = androidx.compose.ui.geometry.Offset(cx, cy)
             )
             
-            // Outer crescent moon path
-            val moonPath = androidx.compose.ui.graphics.Path().apply {
-                val r = width * 0.35f
-                val cx = width * 0.48f
-                val cy = height * 0.5f
-                
+            // Solid inner background medallion
+            drawCircle(
+                color = Color(0xFF1E1C18),
+                radius = w * 0.40f,
+                center = androidx.compose.ui.geometry.Offset(cx, cy)
+            )
+            
+            // Medallion double border (double concentric gold rings)
+            drawCircle(
+                color = Color(0xFFD4AF37).copy(alpha = 0.8f),
+                radius = w * 0.40f,
+                center = androidx.compose.ui.geometry.Offset(cx, cy),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.02f)
+            )
+            drawCircle(
+                color = Color(0xFFD4AF37).copy(alpha = 0.3f),
+                radius = w * 0.36f,
+                center = androidx.compose.ui.geometry.Offset(cx, cy),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.008f)
+            )
+            
+            // Islamic geometry: subtle 8-pointed boundary star inside the border
+            val numPoints = 8
+            val starOuterR = w * 0.40f
+            val starInnerR = w * 0.35f
+            val boundaryPath = androidx.compose.ui.graphics.Path().apply {
+                for (i in 0 until numPoints * 2) {
+                    val angleRad = (i * (360.0 / (numPoints * 2)) - 90.0) * Math.PI / 180.0
+                    val radius = if (i % 2 == 0) starOuterR else starInnerR
+                    val x = cx + radius * Math.cos(angleRad)
+                    val y = cy + radius * Math.sin(angleRad)
+                    if (i == 0) moveTo(x.toFloat(), y.toFloat()) else lineTo(x.toFloat(), y.toFloat())
+                }
+                close()
+            }
+            drawPath(
+                path = boundaryPath,
+                color = Color(0xFFD4AF37).copy(alpha = 0.4f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.01f)
+            )
+
+            // Dynamic Crescent Moon
+            val crescentPath = androidx.compose.ui.graphics.Path().apply {
+                val moonR = w * 0.22f
+                val moonCx = cx - w * 0.04f
+                val moonCy = cy
                 addArc(
-                    androidx.compose.ui.geometry.Rect(cx - r, cy - r, cx + r, cy + r),
+                    androidx.compose.ui.geometry.Rect(moonCx - moonR, moonCy - moonR, moonCx + moonR, moonCy + moonR),
                     -110f,
                     220f
                 )
-                val innerR = r * 0.98f
-                val innerCx = cx + r * 0.38f
+                // Inner clip sphere
+                val clipR = moonR * 0.95f
+                val clipCx = moonCx + moonR * 0.42f
                 addArc(
-                    androidx.compose.ui.geometry.Rect(innerCx - innerR, cy - innerR, innerCx + innerR, cy + innerR),
+                    androidx.compose.ui.geometry.Rect(clipCx - clipR, moonCy - clipR, clipCx + clipR, moonCy + clipR),
                     110f,
                     -220f
                 )
                 close()
             }
             drawPath(
-                path = moonPath,
-                color = Color(0xFFD4AF37) // Golden Glow
+                path = crescentPath,
+                color = Color(0xFFFFD54F) // Golden Yellow filled moon
             )
-            
-            // Standard 8-point Islamic star in the inner curve
-            val starPath = androidx.compose.ui.graphics.Path().apply {
-                val cx = width * 0.65f
-                val cy = height * 0.45f
-                val r1 = width * 0.12f
-                val r2 = width * 0.05f
+
+            // Glowing core 8-point star nesting inside the crescent point
+            val starCx = cx + w * 0.12f
+            val starCy = cy - w * 0.08f
+            val coreStarR1 = w * 0.08f
+            val coreStarR2 = w * 0.035f
+            val coreStarPath = androidx.compose.ui.graphics.Path().apply {
                 for (step in 0 until 8) {
-                    val angleRad1 = (step * 45) * Math.PI / 180.0
-                    val angleRad2 = (step * 45 + 22.5) * Math.PI / 180.0
-                    val p1x = cx + r1 * Math.cos(angleRad1)
-                    val p1y = cy + r1 * Math.sin(angleRad1)
-                    val p2x = cx + r2 * Math.cos(angleRad2)
-                    val p2y = cy + r2 * Math.sin(angleRad2)
+                    val angleRad1 = (step * 45 - 90) * Math.PI / 180.0
+                    val angleRad2 = (step * 45 + 22.5 - 90) * Math.PI / 180.0
+                    val p1x = starCx + coreStarR1 * Math.cos(angleRad1)
+                    val p1y = starCy + coreStarR1 * Math.sin(angleRad1)
+                    val p2x = starCx + coreStarR2 * Math.cos(angleRad2)
+                    val p2y = starCy + coreStarR2 * Math.sin(angleRad2)
                     if (step == 0) {
                         moveTo(p1x.toFloat(), p1y.toFloat())
                     } else {
@@ -1881,8 +2142,27 @@ fun NoorAppLogo(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp
                 close()
             }
             drawPath(
-                path = starPath,
-                color = Color(0xFFE5C158)
+                path = coreStarPath,
+                color = Color(0xFFFFF59D) // Bright star center
+            )
+            
+            // Elegant dome baseline in the center bottom
+            val domePath = androidx.compose.ui.graphics.Path().apply {
+                val dx = cx - w * 0.15f
+                val dy = cy + w * 0.28f
+                moveTo(dx, dy)
+                // Dome arch
+                cubicTo(
+                    cx - w * 0.12f, cy + w * 0.12f,
+                    cx + w * 0.12f, cy + w * 0.12f,
+                    cx + w * 0.15f, dy
+                )
+                lineTo(dx, dy)
+                close()
+            }
+            drawPath(
+                path = domePath,
+                color = Color(0xFFD4AF37).copy(alpha = 0.5f)
             )
         }
     }
@@ -1922,7 +2202,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
                 .align(Alignment.BottomCenter),
             primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
             secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f),
-            drawStars = false // Keep splash simple, let the logo contain the crescent
+            prayerPhase = "isha"
         )
 
         Column(
@@ -1987,6 +2267,7 @@ fun LoginSignupScreen(
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
     var isSignUpMode by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
@@ -2059,17 +2340,30 @@ fun LoginSignupScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isSignUpMode) {
+                        OutlinedTextField(
+                            value = address,
+                            onValueChange = { address = it },
+                            label = { Text("Location Address (City, Region)") },
+                            leadingIcon = { Icon(Icons.Default.Home, contentDescription = "Address") },
+                            modifier = Modifier.fillMaxWidth().testTag("input_signup_address"),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
 
                     errorMsg?.let { msg ->
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
-                            if (email.isEmpty() || password.isEmpty() || (isSignUpMode && username.isEmpty())) {
+                            if (email.isEmpty() || password.isEmpty() || (isSignUpMode && (username.isEmpty() || address.isEmpty()))) {
                                 errorMsg = "Please fill in all fields."
                                 return@Button
                             }
@@ -2082,9 +2376,21 @@ fun LoginSignupScreen(
                                 return@Button
                             }
 
-                            val activeUser = if (isSignUpMode) username else email.substringBefore("@").replaceFirstChar { it.uppercase() }
-                            viewModel.loginOrSignUp(activeUser, email)
-                            onAuthSuccess()
+                            if (isSignUpMode) {
+                                val signupSuccess = viewModel.signUpUser(username, email, password, address)
+                                if (signupSuccess) {
+                                    onAuthSuccess()
+                                } else {
+                                    errorMsg = "An account with this email already exists."
+                                }
+                            } else {
+                                val loginError = viewModel.loginUser(email, password)
+                                if (loginError == null) {
+                                    onAuthSuccess()
+                                } else {
+                                    errorMsg = loginError
+                                }
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2167,6 +2473,19 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
     val mDelay by viewModel.maghribIqamahDelay.collectAsState()
     val iDelay by viewModel.ishaIqamahDelay.collectAsState()
 
+    val fAdhanOver by viewModel.fajrOverrideAdhan.collectAsState()
+    val dAdhanOver by viewModel.dhuhrOverrideAdhan.collectAsState()
+    val aAdhanOver by viewModel.asrOverrideAdhan.collectAsState()
+    val mAdhanOver by viewModel.maghribOverrideAdhan.collectAsState()
+    val iAdhanOver by viewModel.ishaOverrideAdhan.collectAsState()
+
+    val fNamajOver by viewModel.fajrOverrideNamaj.collectAsState()
+    val dNamajOver by viewModel.dhuhrOverrideNamaj.collectAsState()
+    val aNamajOver by viewModel.asrOverrideNamaj.collectAsState()
+    val mNamajOver by viewModel.maghribOverrideNamaj.collectAsState()
+    val iNamajOver by viewModel.ishaOverrideNamaj.collectAsState()
+    val dateQueueTrigger by viewModel.dateQueueTrigger.collectAsState()
+
     val fOff by viewModel.fajrOffset.collectAsState()
     val sOff by viewModel.sunriseOffset.collectAsState()
     val dOff by viewModel.dhuhrOffset.collectAsState()
@@ -2175,6 +2494,8 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
     val iOff by viewModel.ishaOffset.collectAsState()
 
     val loggedInUser by viewModel.loggedInUser.collectAsState()
+    val loggedInEmail by viewModel.loggedInEmail.collectAsState()
+    val loggedInAddress by viewModel.loggedInAddress.collectAsState()
 
     Column(
         modifier = Modifier
@@ -2248,7 +2569,10 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                         Triple("royal_purple", "Royal Purple", Color(0xFFBB86FC)),
                         Triple("emerald_dusk", "Islamic Emerald", Color(0xFF00E676)),
                         Triple("midnight_sapphire", "Midnight Sapphire", Color(0xFF29B6F6)),
-                        Triple("crimson_velvet", "Crimson Velvet", Color(0xFFFF5252))
+                        Triple("crimson_velvet", "Crimson Velvet", Color(0xFFFF5252)),
+                        Triple("golden_oasis", "Golden Oasis", Color(0xFFFFB74D)),
+                        Triple("rose_quartz", "Rose Quartz", Color(0xFFF06292)),
+                        Triple("amber_glow", "Amber Glow", Color(0xFFFFB300))
                     ).forEach { (themeId, labelStr, themeColor) ->
                         Box(
                             modifier = Modifier
@@ -2429,6 +2753,168 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // --- CUSTOM ADHAN & NAMAJ OVERRIDES CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Overrides", tint = MaterialTheme.colorScheme.primary)
+                    Column {
+                        Text(
+                            text = "Self Namaj & Adhan Times",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Override automatic astronomical timings",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                listOf(
+                    Triple("Fajr", fAdhanOver, fNamajOver),
+                    Triple("Dhuhr", dAdhanOver, dNamajOver),
+                    Triple("Asr", aAdhanOver, aNamajOver),
+                    Triple("Maghrib", mAdhanOver, mNamajOver),
+                    Triple("Isha", iAdhanOver, iNamajOver)
+                ).forEach { (prayerName, adhanVal, namajVal) ->
+                    var adhanText by remember(adhanVal) { mutableStateOf(adhanVal) }
+                    var namajText by remember(namajVal) { mutableStateOf(namajVal) }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Text(prayerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = adhanText,
+                                onValueChange = {
+                                    adhanText = it
+                                    viewModel.updateAdhanOverride(prayerName, it)
+                                },
+                                label = { Text("Adhan (HH:mm)") },
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = namajText,
+                                onValueChange = {
+                                    namajText = it
+                                    viewModel.updateNamajOverride(prayerName, it)
+                                },
+                                label = { Text("Namaj (HH:mm)") },
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- SPECIFIC DATE QUEUE TIME CARD ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.DateRange, contentDescription = "Date Queue Delay", tint = MaterialTheme.colorScheme.secondary)
+                    Column {
+                        Text(
+                            text = "Queue Delay at Specific Date",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Configure custom Iqamah delays for special occasions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                var targetDateText by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+                var selectedPrayerName by remember { mutableStateOf("Fajr") }
+                var customDelayText by remember { mutableStateOf("15") }
+
+                OutlinedTextField(
+                    value = targetDateText,
+                    onValueChange = { targetDateText = it },
+                    label = { Text("Target Date (yyyy-MM-dd)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Prayer Selector Chips
+                    listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha").forEach { pName ->
+                        FilterChip(
+                            selected = selectedPrayerName == pName,
+                            onClick = { selectedPrayerName = pName },
+                            label = { Text(pName) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = customDelayText,
+                    onValueChange = { customDelayText = it },
+                    label = { Text("Queue Delay (Minutes)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        val minutes = customDelayText.toIntOrNull()
+                        if (minutes == null || minutes < 0) {
+                            Toast.makeText(context, "Please enter a valid positive number of minutes", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.setQueueDelayForPrayer(selectedPrayerName, targetDateText, minutes)
+                            Toast.makeText(context, "[Success] Applied $selectedPrayerName queue delay of $minutes minutes for $targetDateText", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Apply specific date delay")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Apply Specific Date Queue Delay")
                 }
             }
         }
@@ -2627,6 +3113,24 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                if (loggedInEmail.isNotEmpty()) {
+                    Text(
+                        text = loggedInEmail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                if (loggedInAddress.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Address: $loggedInAddress",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Aptitude profile synchronization ready with offline log buffers",
                     style = MaterialTheme.typography.bodySmall,
@@ -2714,22 +3218,139 @@ fun androidx.compose.ui.graphics.Path.addOnionDome(
 @Composable
 fun MosqueDomeAndMinaretBackground(
     modifier: Modifier = Modifier,
-    primaryColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-    secondaryColor: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
-    drawStars: Boolean = true
+    primaryColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+    secondaryColor: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+    prayerPhase: String = "isha"
 ) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         if (w <= 0f || h <= 0f) return@Canvas
 
-        // 1. Draw twinkling celestial stars if requested
-        if (drawStars) {
+        val phase = prayerPhase.lowercase().trim()
+        
+        // 1. Draw glowing gorgeous sky background based on active prayer time
+        val gradientBrush = when {
+            phase.contains("fajr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(Color(0xFF2E1A47), Color(0xFFF07B3F)),
+                startY = 0f,
+                endY = h
+            )
+            phase.contains("dhuhr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(Color(0xFF1E88E5), Color(0xFF90CAF9)),
+                startY = 0f,
+                endY = h
+            )
+            phase.contains("asr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(Color(0xFFFB8C00), Color(0xFFFFD54F)),
+                startY = 0f,
+                endY = h
+            )
+            phase.contains("maghrib") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(Color(0xFF9C27B0), Color(0xFFE91E63)),
+                startY = 0f,
+                endY = h
+            )
+            else -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(Color(0xFF0F2027), Color(0xFF203A43)),
+                startY = 0f,
+                endY = h
+            )
+        }
+        drawRect(brush = gradientBrush, size = size)
+
+        // 2. Draw corresponding astronomical/celestial bodies
+        if (phase.contains("fajr")) {
+            // Draw sunrise: soft glowing sun rising from bottom left
+            val scx = w * 0.20f
+            val scy = h * 0.70f
+            drawCircle(
+                color = Color(0xFFFFF176).copy(alpha = 0.85f),
+                radius = 24f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            drawCircle(
+                color = Color(0xFFFFB74D).copy(alpha = 0.40f),
+                radius = 42f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+        } else if (phase.contains("dhuhr")) {
+            // High noon sun at the absolute head (top center)
+            val scx = w * 0.5f
+            val scy = h * 0.22f
+            drawCircle(
+                color = Color(0xFFFFEB3B),
+                radius = 22f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            drawCircle(
+                color = Color(0xFFFFF59D).copy(alpha = 0.40f),
+                radius = 45f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            // Draw shining high sunrays radiating symmetrically
+            for (i in 0 until 8) {
+                val angle = i * (Math.PI / 4)
+                val startX = scx + Math.cos(angle).toFloat() * 28f
+                val startY = scy + Math.sin(angle).toFloat() * 28f
+                val endX = scx + Math.cos(angle).toFloat() * 46f
+                val endY = scy + Math.sin(angle).toFloat() * 46f
+                drawLine(
+                    color = Color(0xFFFFEB3B).copy(alpha = 0.7f),
+                    start = androidx.compose.ui.geometry.Offset(startX, startY),
+                    end = androidx.compose.ui.geometry.Offset(endX, endY),
+                    strokeWidth = 3.5f
+                )
+            }
+        } else if (phase.contains("asr")) {
+            // Late afternoon golden hour sun settling mid-way towards the right
+            val scx = w * 0.78f
+            val scy = h * 0.40f
+            drawCircle(
+                color = Color(0xFFFFB300),
+                radius = 20f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            drawCircle(
+                color = Color(0xFFFFE082).copy(alpha = 0.35f),
+                radius = 34f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            // Golden warm rays
+            for (i in 0 until 6) {
+                val angle = i * (Math.PI / 3) + (Math.PI / 6)
+                val startX = scx + Math.cos(angle).toFloat() * 25f
+                val startY = scy + Math.sin(angle).toFloat() * 25f
+                val endX = scx + Math.cos(angle).toFloat() * 38f
+                val endY = scy + Math.sin(angle).toFloat() * 38f
+                drawLine(
+                    color = Color(0xFFFFB300).copy(alpha = 0.6f),
+                    start = androidx.compose.ui.geometry.Offset(startX, startY),
+                    end = androidx.compose.ui.geometry.Offset(endX, endY),
+                    strokeWidth = 2.5f
+                )
+            }
+        } else if (phase.contains("maghrib")) {
+            // Sunset: sun half submerged behind the horizon
+            val scx = w * 0.72f
+            val scy = h * 0.75f
+            drawCircle(
+                color = Color(0xFFFF3D00).copy(alpha = 0.95f),
+                radius = 18f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+            drawCircle(
+                color = Color(0xFFFF8A65).copy(alpha = 0.45f),
+                radius = 30f,
+                center = androidx.compose.ui.geometry.Offset(scx, scy)
+            )
+        } else {
+            // Isha - starry deep night with twinkling stars and glowing crescent moon
             val stars = listOf(
                 Pair(w * 0.12f, h * 0.18f),
                 Pair(w * 0.22f, h * 0.12f),
                 Pair(w * 0.35f, h * 0.22f),
-                Pair(w * 0.60f, h * 0.1f),
+                Pair(w * 0.60f, h * 0.10f),
                 Pair(w * 0.76f, h * 0.20f),
                 Pair(w * 0.88f, h * 0.14f)
             )
@@ -2742,11 +3363,11 @@ fun MosqueDomeAndMinaretBackground(
                     quadraticTo(sx, sy, sx, sy - 3.5f)
                     close()
                 }
-                drawPath(starPath, color = Color.White.copy(alpha = 0.45f))
+                drawPath(starPath, color = Color.White.copy(alpha = 0.60f))
             }
 
-            // Draw a glorious glowing crescent moon in the top right quadrant
-            val mcx = w * 0.84f
+            // High-contrast golden crescent moon
+            val mcx = w * 0.82f
             val mcy = h * 0.28f
             val mr = 15f
             val moonPath = androidx.compose.ui.graphics.Path().apply {
@@ -2762,10 +3383,10 @@ fun MosqueDomeAndMinaretBackground(
                 )
                 close()
             }
-            drawPath(moonPath, color = Color(0xFFFFD4AF).copy(alpha = 0.55f))
+            drawPath(moonPath, color = Color(0xFFFFF9C4).copy(alpha = 0.75f))
         }
 
-        // 2. Draw Mosque Skyline: Symmetrical layered onion domes & minarets
+        // 3. Draw Mosque Skyline over the sky background & elements
         val bgDomePath = androidx.compose.ui.graphics.Path()
         val bgCx = w * 0.5f
         val bgYGround = h
