@@ -80,6 +80,96 @@ object HadithDuaData {
             text = "Give charity without delay, for it stands in the way of calamity.",
             narration = "Al-Tirmidhi",
             topic = "Kindness & Charity"
+        ),
+        HadithItem(
+            id = "hadith_11",
+            text = "The most perfect man in his faith among the believers is the one whose behaviour is most excellent.",
+            narration = "Sunan Abi Dawud",
+            topic = "Character & Manners"
+        ),
+        HadithItem(
+            id = "hadith_12",
+            text = "None of you will have faith until he wishes for his brother what he likes for himself.",
+            narration = "Sahih al-Bukhari & Sahih Muslim",
+            topic = "Kindness & Charity"
+        ),
+        HadithItem(
+            id = "hadith_13",
+            text = "A prayer in congregation is twenty-seven times superior to a prayer offered individually.",
+            narration = "Sahih al-Bukhari & Sahih Muslim",
+            topic = "Prayer & Remembrance"
+        ),
+        HadithItem(
+            id = "hadith_14",
+            text = "Make things easy and do not make them difficult, cheer people up and do not make them turn away.",
+            narration = "Sahih al-Bukhari",
+            topic = "Character & Manners"
+        ),
+        HadithItem(
+            id = "hadith_15",
+            text = "Allah will help His servant as long as the servant helps his brother.",
+            narration = "Sahih Muslim",
+            topic = "Kindness & Charity"
+        ),
+        HadithItem(
+            id = "hadith_16",
+            text = "Seeking knowledge is an obligation upon every Muslim.",
+            narration = "Sunan Ibn Majah",
+            topic = "Knowledge & Wisom"
+        ),
+        HadithItem(
+            id = "hadith_17",
+            text = "Do not waste water, even if you are performing wudu on the banks of a flowing river.",
+            narration = "Sunan Ibn Majah",
+            topic = "Character & Manners"
+        ),
+        HadithItem(
+            id = "hadith_18",
+            text = "The key to Paradise is prayer, and the key to prayer is cleanliness (Wudu).",
+            narration = "Musnad Ahmad",
+            topic = "Prayer & Remembrance"
+        ),
+        HadithItem(
+            id = "hadith_19",
+            text = "He who is not merciful to others will not be shown mercy.",
+            narration = "Sahih al-Bukhari & Sahih Muslim",
+            topic = "Kindness & Charity"
+        ),
+        HadithItem(
+            id = "hadith_20",
+            text = "The best of your companions in the sight of Allah is the one who is best to his companion.",
+            narration = "Jami' al-Tirmidhi",
+            topic = "Character & Manners"
+        ),
+        HadithItem(
+            id = "hadith_21",
+            text = "Allah accepts only those deeds that were performed purely for His sake and which were seeking His countenance.",
+            narration = "Sunan an-Nasa'i",
+            topic = "Intention & Sincerity"
+        ),
+        HadithItem(
+            id = "hadith_22",
+            text = "When a man dies, his deeds come to an end except for three things: Sadaqah Jariyah (ceaseless charity), a knowledge which is beneficial, or a virtuous descendant who prays for him.",
+            narration = "Sahih Muslim",
+            topic = "Knowledge & Wisom"
+        ),
+        HadithItem(
+            id = "hadith_23",
+            text = "Whoever prays the two cool prayers (Fajr and Asr) will enter Paradise.",
+            narration = "Sahih al-Bukhari",
+            topic = "Prayer & Remembrance"
+        ),
+        HadithItem(
+            id = "hadith_24",
+            text = "Riches are not from an abundance of worldly goods, but true riches are the richness of the soul and contentment.",
+            narration = "Sahih al-Bukhari",
+            topic = "Character & Manners"
+        ),
+        HadithItem(
+            id = "hadith_25",
+            text = "If people knew the reward for the Isha and Fajr prayers in congregation, they would join them even if they had to crawl.",
+            narration = "Sahih al-Bukhari",
+            topic = "Prayer & Remembrance"
         )
     )
 

@@ -31,7 +31,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -110,6 +117,13 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
     } else if (!isLoggedIn) {
         LoginSignupScreen(viewModel = viewModel, onAuthSuccess = {})
     } else {
+        val isLoggingEnabled by viewModel.isLoggingEnabled.collectAsState()
+        LaunchedEffect(isLoggingEnabled) {
+            if (!isLoggingEnabled && currentTab == Tabs.STATS) {
+                currentTab = Tabs.PRAYERS
+            }
+        }
+
         Scaffold(
             bottomBar = {
             NavigationBar(
@@ -118,15 +132,19 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
                     .testTag("app_bottom_navigation"),
                 tonalElevation = 8.dp
             ) {
-                val tabs = listOf(
+                val tabs = mutableListOf(
                     Tabs.PRAYERS to Icons.Default.Schedule,
                     Tabs.QURAN to Icons.Default.Book,
                     Tabs.WISDOM to Icons.Default.AutoAwesome,
                     Tabs.CALENDAR to Icons.Default.CalendarMonth,
-                    Tabs.QIBLA to Icons.Default.Explore,
-                    Tabs.STATS to Icons.Default.BarChart,
-                    Tabs.SETTINGS to Icons.Default.Settings
-                )
+                    Tabs.QIBLA to Icons.Default.Explore
+                ).apply {
+                    if (isLoggingEnabled) {
+                        add(Tabs.STATS to Icons.Default.BarChart)
+                    }
+                    add(Tabs.SETTINGS to Icons.Default.Settings)
+                }
+
                 tabs.forEach { (tabName, icon) ->
                     NavigationBarItem(
                         selected = currentTab == tabName,
@@ -147,8 +165,8 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .animatedGradientBackground(currentTheme == "aurora_live")
-                .background(if (currentTheme == "aurora_live") Color.Transparent else MaterialTheme.colorScheme.background)
+                .animatedGradientBackground(currentTheme)
+                .background(if (currentTheme == "aurora_live" || currentTheme == "nebula_live") Color.Transparent else MaterialTheme.colorScheme.background)
         ) { tab ->
             when (tab) {
                 Tabs.PRAYERS -> PrayersScreen(
@@ -179,6 +197,7 @@ fun PrayersScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
+    val isLoggingEnabled by viewModel.isLoggingEnabled.collectAsState()
     val times by viewModel.prayerTimes.collectAsState()
     val todayLogs by viewModel.todayLogs.collectAsState()
     val nextInfo by viewModel.nextPrayerInfo.collectAsState()
@@ -669,46 +688,57 @@ fun PrayersScreen(
                     }
 
                     if (!isCelestial) {
-                        val timePassed = isPrayerTimePassed(time, selectedDateStr)
-                        IconButton(
-                            onClick = {
-                                if (log != null) {
-                                    // Reset log state if clicked again when already logged
-                                    viewModel.togglePrayer(name, false)
-                                } else {
-                                    if (timePassed) {
-                                        // Open options log dialog immediately
-                                        logDialogState = name
+                        if (isLoggingEnabled) {
+                            val timePassed = isPrayerTimePassed(time, selectedDateStr)
+                            IconButton(
+                                onClick = {
+                                    if (log != null) {
+                                        // Reset log state if clicked again when already logged
+                                        viewModel.togglePrayer(name, false)
                                     } else {
-                                        Toast.makeText(context, "Cannot log $name in advance! Locked until real time ($time).", Toast.LENGTH_SHORT).show()
+                                        if (timePassed) {
+                                            // Open options log dialog immediately
+                                            logDialogState = name
+                                        } else {
+                                            Toast.makeText(context, "Cannot log $name in advance! Locked until real time ($time).", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
-                                }
-                            },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("checkbox_${name.lowercase()}")
-                        ) {
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("checkbox_${name.lowercase()}")
+                            ) {
+                                Icon(
+                                    imageVector = if (completed) {
+                                        Icons.Default.CheckCircle
+                                    } else if (isMissed) {
+                                        Icons.Default.Cancel
+                                    } else if (!timePassed) {
+                                        Icons.Default.Lock
+                                    } else {
+                                        Icons.Default.RadioButtonUnchecked
+                                    },
+                                    contentDescription = "Log $name",
+                                    tint = if (completed) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else if (isMissed) {
+                                        MaterialTheme.colorScheme.error
+                                    } else if (!timePassed) {
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    } else {
+                                        MaterialTheme.colorScheme.outline
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        } else {
                             Icon(
-                                imageVector = if (completed) {
-                                    Icons.Default.CheckCircle
-                                } else if (isMissed) {
-                                    Icons.Default.Cancel
-                                } else if (!timePassed) {
-                                    Icons.Default.Lock
-                                } else {
-                                    Icons.Default.RadioButtonUnchecked
-                                },
-                                contentDescription = "Log $name",
-                                tint = if (completed) {
-                                    MaterialTheme.colorScheme.primary
-                                } else if (isMissed) {
-                                    MaterialTheme.colorScheme.error
-                                } else if (!timePassed) {
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                } else {
-                                    MaterialTheme.colorScheme.outline
-                                },
-                                modifier = Modifier.size(32.dp)
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = "Active Notifications Alert",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .padding(4.dp)
                             )
                         }
                     } else {
@@ -831,8 +861,7 @@ fun PrayersScreen(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                var isInCongregation by remember { mutableStateOf(false) }
-                var isQada by remember { mutableStateOf(false) }
+                var selectedOption by remember { mutableStateOf<String?>(null) }
                 Column(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -843,65 +872,108 @@ fun PrayersScreen(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Please select the prayer status to submit",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Prayed in Congregation (Jama'at)")
-                        Switch(
-                            checked = isInCongregation,
-                            onCheckedChange = { isInCongregation = it },
-                            modifier = Modifier.testTag("switch_jamaat")
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    val options = listOf(
+                        Triple("alone", "Prayed Individually (Alone)", "Offered prayer on-time by yourself"),
+                        Triple("jamaat", "Prayed in Congregation (Jama'at)", "Offered prayer with others in congregation"),
+                        Triple("qada", "Prayed Late (Qada)", "Offered late after the prayer time elapsed"),
+                        Triple("missed", "Missed / Not Prayed", "Register this prayer as skipped or missed")
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Prayed Qada (Missed Time)")
-                        Switch(
-                            checked = isQada,
-                            onCheckedChange = { isQada = it },
-                            modifier = Modifier.testTag("switch_qada")
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        TextButton(onClick = { logDialogState = null }) {
-                            Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        TextButton(
-                            onClick = {
-                                viewModel.logMissedPrayer(name)
-                                logDialogState = null
-                            },
-                            modifier = Modifier.testTag("btn_log_not_prayed")
+                    options.forEach { (optionKey, title, desc) ->
+                        val isSelected = selectedOption == optionKey
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { selectedOption = optionKey }
+                                .testTag("log_option_$optionKey"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                            ),
+                            border = BorderStroke(
+                                width = if (isSelected) 1.8.dp else 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                            )
                         ) {
-                            Text("Not Prayed", color = MaterialTheme.colorScheme.error)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { selectedOption = optionKey },
+                                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = desc,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Button(
                             onClick = {
-                                viewModel.togglePrayer(
-                                    prayerName = name,
-                                    completed = true,
-                                    isCongregation = isInCongregation,
-                                    isQada = isQada
-                                )
+                                val opt = selectedOption ?: return@Button
+                                when (opt) {
+                                    "alone" -> {
+                                        viewModel.togglePrayer(prayerName = name, completed = true, isCongregation = false, isQada = false)
+                                    }
+                                    "jamaat" -> {
+                                        viewModel.togglePrayer(prayerName = name, completed = true, isCongregation = true, isQada = false)
+                                    }
+                                    "qada" -> {
+                                        viewModel.togglePrayer(prayerName = name, completed = true, isCongregation = false, isQada = true)
+                                    }
+                                    "missed" -> {
+                                        viewModel.logMissedPrayer(name)
+                                    }
+                                }
                                 logDialogState = null
                             },
-                            modifier = Modifier.testTag("btn_save_detailed_log")
+                            enabled = selectedOption != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("btn_save_detailed_log")
                         ) {
-                            Text("Log Prayed")
+                            Text("Submit Log", fontWeight = FontWeight.Bold)
+                        }
+
+                        TextButton(
+                            onClick = { logDialogState = null },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -1704,7 +1776,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .rotate(-heading) // Rotate entire card relative to north
+                    .graphicsLayer { rotationZ = -heading } // Rotate entire card relative to north optimized
                     .padding(12.dp)
                     .testTag("qibla_compass_dial"),
                 contentAlignment = Alignment.Center
@@ -1729,7 +1801,7 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .rotate(bearing.toFloat())
+                        .graphicsLayer { rotationZ = bearing.toFloat() }
                 ) {
                     Box(
                         modifier = Modifier
@@ -1754,16 +1826,71 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                     }
                 }
 
-                // 2. Central Yellow needle pointing directly outwards to the Kaaba position
-                Icon(
-                    imageVector = Icons.Default.Navigation,
-                    contentDescription = "Qibla pointer needle",
-                    tint = if (isAligned) Color(0xFF4CAF50) else Color(0xFFD4AF37),
+                // 2. Central High-Fidelity 3D-Shaded Diamond Pointer pointing with absolute mathematical precision
+                Canvas(
                     modifier = Modifier
-                        .size(80.dp)
-                        .rotate(bearing.toFloat() - 45f) // Turns arrow pointing directly to Mecca bearing in center (-45 is icon offset)
+                        .size(110.dp)
+                        .graphicsLayer { rotationZ = bearing.toFloat() }
                         .testTag("qibla_compass_needle")
-                )
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val needleWidth = 14.dp.toPx()
+                    val centerNotchOffset = 6.dp.toPx()
+
+                    // Left half of the North indicator (Golden or Emerald green)
+                    val pathNorthLeft = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(w / 2, 0f)
+                        lineTo(w / 2 - needleWidth, h / 2)
+                        lineTo(w / 2, h / 2 - centerNotchOffset)
+                        close()
+                    }
+                    // Right half of the North indicator (slightly brighter for 3D/bevel lighting effect)
+                    val pathNorthRight = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(w / 2, 0f)
+                        lineTo(w / 2 + needleWidth, h / 2)
+                        lineTo(w / 2, h / 2 - centerNotchOffset)
+                        close()
+                    }
+                    // Left half of the South indicator (Silver-grey)
+                    val pathSouthLeft = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(w / 2, h)
+                        lineTo(w / 2 - needleWidth, h / 2)
+                        lineTo(w / 2, h / 2 + centerNotchOffset)
+                        close()
+                    }
+                    // Right half of the South indicator (slightly lighter Silver-grey)
+                    val pathSouthRight = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(w / 2, h)
+                        lineTo(w / 2 + needleWidth, h / 2)
+                        lineTo(w / 2, h / 2 + centerNotchOffset)
+                        close()
+                    }
+
+                    // Render with beautiful dynamic active colors
+                    drawPath(
+                        path = pathNorthLeft,
+                        color = if (isAligned) Color(0xFF2E7D32) else Color(0xFFC5A059) // Darker shade of emerald/gold
+                    )
+                    drawPath(
+                        path = pathNorthRight,
+                        color = if (isAligned) Color(0xFF4CAF50) else Color(0xFFFFD54F) // Lighter shade profile
+                    )
+                    drawPath(
+                        path = pathSouthLeft,
+                        color = Color(0xFF5A5A5A)
+                    )
+                    drawPath(
+                        path = pathSouthRight,
+                        color = Color(0xFF8E8E8E)
+                    )
+
+                    // Draw golden/emerald glowing pivot cap in center
+                    drawCircle(
+                        color = if (isAligned) Color(0xFFB9F6CA) else Color(0xFFFFF9C4),
+                        radius = 4.dp.toPx()
+                    )
+                }
             }
         }
 
@@ -2349,9 +2476,12 @@ fun LoginSignupScreen(
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
+    var trackingModeSelection by remember { mutableStateOf(true) } // true = Log Prayers & stats, false = Notification only
     var isSignUpMode by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     Box(
         modifier = Modifier
@@ -2399,7 +2529,10 @@ fun LoginSignupScreen(
                             label = { Text("Believer's Name") },
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Name") },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Next
+                            )
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
@@ -2410,7 +2543,11 @@ fun LoginSignupScreen(
                         label = { Text("Email Address") },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
+                        )
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -2420,32 +2557,134 @@ fun LoginSignupScreen(
                         label = { Text("Password") },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = if (isSignUpMode) ImeAction.Done else ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            }
+                        )
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     if (isSignUpMode) {
-                        OutlinedTextField(
-                            value = address,
-                            onValueChange = { address = it },
-                            label = { Text("Location Address (City, Region)") },
-                            leadingIcon = { Icon(Icons.Default.Home, contentDescription = "Address") },
-                            modifier = Modifier.fillMaxWidth().testTag("input_signup_address"),
-                            singleLine = true
+                        Text(
+                            text = "Choose App Experience:",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Start).padding(bottom = 6.dp)
                         )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Card A: Log Prayers
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { trackingModeSelection = true }
+                                    .border(
+                                        1.5.dp,
+                                        if (trackingModeSelection) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (trackingModeSelection) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Log Prayers Option",
+                                        tint = if (trackingModeSelection) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Log Prayers",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        "Record status & view stats charts",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 10.sp
+                                    )
+                                }
+                            }
+
+                            // Card B: Notifications Only
+                            Card(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { trackingModeSelection = false }
+                                    .border(
+                                        1.5.dp,
+                                        if (!trackingModeSelection) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (!trackingModeSelection) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.NotificationsActive,
+                                        contentDescription = "Notifications Only Option",
+                                        tint = if (!trackingModeSelection) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Only Alerts",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        "Receive calendar & adhan alerts only",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 10.sp
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
                     errorMsg?.let { msg ->
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
-                            if (email.isEmpty() || password.isEmpty() || (isSignUpMode && (username.isEmpty() || address.isEmpty()))) {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            if (email.isEmpty() || password.isEmpty() || (isSignUpMode && username.isEmpty())) {
                                 errorMsg = "Please fill in all fields."
                                 return@Button
                             }
@@ -2459,7 +2698,7 @@ fun LoginSignupScreen(
                             }
 
                             if (isSignUpMode) {
-                                val signupSuccess = viewModel.signUpUser(username, email, password, address)
+                                val signupSuccess = viewModel.signUpUser(username, email, password, trackingModeSelection)
                                 if (signupSuccess) {
                                     onAuthSuccess()
                                 } else {
@@ -2655,7 +2894,8 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                         Triple("golden_oasis", "Golden Oasis", Color(0xFFFFB74D)),
                         Triple("rose_quartz", "Rose Quartz", Color(0xFFF06292)),
                         Triple("amber_glow", "Amber Glow", Color(0xFFFFB300)),
-                        Triple("aurora_live", "Aurora Live", Color(0xFF1DE9B6))
+                        Triple("aurora_live", "Aurora Live", Color(0xFF1DE9B6)),
+                        Triple("nebula_live", "Nebula Live", Color(0xFFE040FB))
                     ).forEach { (themeId, labelStr, themeColor) ->
                         Box(
                             modifier = Modifier
@@ -3150,7 +3390,64 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
             }
         }
 
-        // --- 5. LOGOUT / ACCOUNT CARD ---
+        // --- 5. APP MODE & TRACKING ---
+        val isLoggingEnabledSetting by viewModel.isLoggingEnabled.collectAsState()
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Tracking Icon",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "App Mode & Tracking Preference",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1.5f)) {
+                        Text(
+                            text = "Log Prayers & Statistics",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Record prayer checklist status, missed prayers, and spiritual progress charts. Turn off to receive Adhan alerts only.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = isLoggingEnabledSetting,
+                        onCheckedChange = { viewModel.updateLoggingPreference(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
+        }
+
+        // --- 6. LOGOUT / ACCOUNT CARD ---
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),

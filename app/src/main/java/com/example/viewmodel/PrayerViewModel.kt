@@ -66,6 +66,7 @@ class PrayerViewModel(
     val loggedInUser = MutableStateFlow(prefs.getString("logged_in_user", "") ?: "")
     val loggedInEmail = MutableStateFlow(prefs.getString("logged_in_email", "") ?: "")
     val loggedInAddress = MutableStateFlow(prefs.getString("logged_in_address", "") ?: "")
+    val isLoggingEnabled = MutableStateFlow(prefs.getBoolean("is_logging_enabled", true))
 
     fun loginOrSignUp(username: String, email: String) {
         prefs.edit().apply {
@@ -79,7 +80,7 @@ class PrayerViewModel(
         loggedInEmail.value = email
     }
 
-    fun signUpUser(username: String, email: String, passwordSecured: String, addressInput: String): Boolean {
+    fun signUpUser(username: String, email: String, passwordSecured: String, isLoggingEnabledInput: Boolean): Boolean {
         val normalizedEmail = email.lowercase().trim()
         if (prefs.getBoolean("reg_exists_$normalizedEmail", false)) {
             return false // Already exists
@@ -88,12 +89,21 @@ class PrayerViewModel(
             putBoolean("reg_exists_$normalizedEmail", true)
             putString("reg_name_$normalizedEmail", username.trim())
             putString("reg_pwd_$normalizedEmail", passwordSecured)
-            putString("reg_address_$normalizedEmail", addressInput.trim())
+            putBoolean("reg_logging_enabled_$normalizedEmail", isLoggingEnabledInput)
             apply()
         }
         // Auto sign in on registration success
         loginUser(normalizedEmail, passwordSecured)
         return true
+    }
+
+    fun updateLoggingPreference(enabled: Boolean) {
+        isLoggingEnabled.value = enabled
+        prefs.edit().putBoolean("is_logging_enabled", enabled).apply()
+        val email = loggedInEmail.value
+        if (email.isNotEmpty()) {
+            prefs.edit().putBoolean("reg_logging_enabled_$email", enabled).apply()
+        }
     }
 
     private fun geocodeAddressToCoordinates(address: String): Pair<Double, Double> {
@@ -144,22 +154,30 @@ class PrayerViewModel(
         }
         val storedName = prefs.getString("reg_name_$normalizedEmail", "") ?: normalizedEmail.substringBefore("@")
         val storedAddress = prefs.getString("reg_address_$normalizedEmail", "") ?: ""
+        val storedLoggingEnabled = prefs.getBoolean("reg_logging_enabled_$normalizedEmail", true)
 
         prefs.edit().apply {
             putBoolean("is_logged_in", true)
             putString("logged_in_user", storedName)
             putString("logged_in_email", normalizedEmail)
             putString("logged_in_address", storedAddress)
+            putBoolean("is_logging_enabled", storedLoggingEnabled)
             apply()
         }
         isLoggedIn.value = true
         loggedInUser.value = storedName
         loggedInEmail.value = normalizedEmail
         loggedInAddress.value = storedAddress
+        isLoggingEnabled.value = storedLoggingEnabled
 
         // Resolve the stored city address and update live coordinates
-        val (lat, lon) = geocodeAddressToCoordinates(storedAddress)
-        updateLocation(lat, lon, storedAddress)
+        if (storedAddress.isNotEmpty()) {
+            val (lat, lon) = geocodeAddressToCoordinates(storedAddress)
+            updateLocation(lat, lon, storedAddress)
+        } else {
+            // Use fallback or current GPS default
+            updateLocation(latitude.value, longitude.value, locationLabel.value)
+        }
 
         return null // success
     }
@@ -170,12 +188,14 @@ class PrayerViewModel(
             putString("logged_in_user", "")
             putString("logged_in_email", "")
             putString("logged_in_address", "")
+            putBoolean("is_logging_enabled", true)
             apply()
         }
         isLoggedIn.value = false
         loggedInUser.value = ""
         loggedInEmail.value = ""
         loggedInAddress.value = ""
+        isLoggingEnabled.value = true
     }
 
     // Individual Prayer Offset Adjustments in minutes (+/-)
@@ -786,14 +806,24 @@ class PrayerViewModel(
                     val azimuthRad = orientationValues[0]
                     val azimuthDegRaw = Math.toDegrees(azimuthRad.toDouble())
                     val azimuthDeg = (azimuthDegRaw + 360.0) % 360.0
-                    deviceHeading.value = azimuthDeg.toFloat()
+                    val floatVal = azimuthDeg.toFloat()
+                    val currentVal = deviceHeading.value
+                    // Only update and trigger recomposition if heading has changed by at least 1.0 degree
+                    if (kotlin.math.abs(currentVal - floatVal) >= 1.0f || currentVal == 0.0f) {
+                        deviceHeading.value = floatVal
+                    }
                 }
             } else if (event.sensor.type == Sensor.TYPE_ORIENTATION) {
                 val values = event.values
                 if (values.isNotEmpty()) {
                     val azimuthDegRaw = values[0].toDouble()
                     val azimuthDeg = (azimuthDegRaw + 360.0) % 360.0
-                    deviceHeading.value = azimuthDeg.toFloat()
+                    val floatVal = azimuthDeg.toFloat()
+                    val currentVal = deviceHeading.value
+                    // Only update and trigger recomposition if heading has changed by at least 1.0 degree
+                    if (kotlin.math.abs(currentVal - floatVal) >= 1.0f || currentVal == 0.0f) {
+                        deviceHeading.value = floatVal
+                    }
                 }
             }
         } catch (e: Throwable) {
