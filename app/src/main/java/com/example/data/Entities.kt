@@ -23,7 +23,8 @@ data class QuranProgress(
     val startAyah: Int,
     val endAyah: Int,
     val timestamp: Long = System.currentTimeMillis(),
-    val durationMinutes: Int = 0
+    val durationMinutes: Int = 0,
+    val durationSeconds: Int = 0
 )
 
 @Entity(tableName = "bookmarks")

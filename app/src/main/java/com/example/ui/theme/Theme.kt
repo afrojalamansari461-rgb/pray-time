@@ -9,7 +9,18 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 
 private val DarkColorScheme =
   darkColorScheme(
@@ -149,6 +160,67 @@ private val AmberColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF383120)
 )
 
+private val AuroraColorScheme = darkColorScheme(
+    primary = Color(0xFF1DE9B6),
+    onPrimary = Color(0xFF00372A),
+    primaryContainer = Color(0xFF00503E),
+    onPrimaryContainer = Color(0xFFA7FFEB),
+    secondary = Color(0xFF00E5FF),
+    tertiary = Color(0xFFD4AF37),
+    background = Color(0xFF070F0D),
+    surface = Color(0xFF0F1E19),
+    onBackground = Color(0xFFE0F2F1),
+    onSurface = Color(0xFFE0F2F1),
+    surfaceVariant = Color(0xFF1B312B),
+    onSurfaceVariant = Color(0xFFB2DFDB),
+    outline = Color(0xFF80CBC4),
+    outlineVariant = Color(0xFF1B312B)
+)
+
+@Composable
+fun Modifier.animatedGradientBackground(enabled: Boolean): Modifier {
+    if (!enabled) return this
+    val infiniteTransition = rememberInfiniteTransition(label = "bgSweep")
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "progress"
+    )
+
+    return this.drawBehind {
+        val color1 = Color(0xFF050B09)
+        val color2 = Color(0xFF08120F)
+        val color3 = Color(0xFF0C1D18)
+        val accent1 = Color(0xFF1DE9B6).copy(alpha = 0.14f * animProgress)
+        val accent2 = Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
+        val accent3 = Color(0xFF00ACC1).copy(alpha = 0.08f * animProgress)
+
+        // Draw deep base background
+        drawRect(color = color1)
+        
+        // Draw slowly flowing organic moving gradient blobs
+        drawCircle(
+            color = accent1,
+            radius = size.width * 0.95f,
+            center = Offset(size.width * 0.15f, size.height * (0.15f + 0.12f * animProgress))
+        )
+        drawCircle(
+            color = accent2,
+            radius = size.width * 1.1f,
+            center = Offset(size.width * 0.85f, size.height * (0.85f - 0.12f * animProgress))
+        )
+        drawCircle(
+            color = accent3,
+            radius = size.width * 0.75f,
+            center = Offset(size.width * 0.5f, size.height * (0.5f + 0.06f * animProgress))
+        )
+    }
+}
+
 @Composable
 fun MyApplicationTheme(
   themeName: String = "royal_purple",
@@ -161,6 +233,7 @@ fun MyApplicationTheme(
     "golden_oasis" -> GoldenOasisColorScheme
     "rose_quartz" -> RoseQuartzColorScheme
     "amber_glow" -> AmberColorScheme
+    "aurora_live" -> AuroraColorScheme
     else -> DarkColorScheme
   }
 

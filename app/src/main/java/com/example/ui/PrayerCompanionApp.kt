@@ -42,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.data.PrayerLog
 import com.example.data.QuranProgress
+import com.example.ui.theme.animatedGradientBackground
 import com.example.utils.PrayerTimeCalculator
 import com.example.viewmodel.PrayerViewModel
 import kotlinx.coroutines.delay
@@ -139,13 +140,15 @@ fun PrayerCompanionApp(viewModel: PrayerViewModel) {
         },
         contentWindowInsets = WindowInsets.safeDrawing
     ) { paddingValues ->
+        val currentTheme by viewModel.currentThemeName.collectAsState()
         Crossfade(
             targetState = currentTab,
             animationSpec = tween(250),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .animatedGradientBackground(currentTheme == "aurora_live")
+                .background(if (currentTheme == "aurora_live") Color.Transparent else MaterialTheme.colorScheme.background)
         ) { tab ->
             when (tab) {
                 Tabs.PRAYERS -> PrayersScreen(
@@ -1012,7 +1015,25 @@ fun QuranScreen(viewModel: PrayerViewModel) {
 
     // Calculator for statistics
     val quranCount = progressEntries.size
-    val totalTime = progressEntries.sumOf { it.durationMinutes }
+    val totalSecondsSum = progressEntries.sumOf { it.durationSeconds }
+    val totalMinutesSum = progressEntries.sumOf { it.durationMinutes } + (totalSecondsSum / 60)
+    val remainingSeconds = totalSecondsSum % 60
+
+    val totalReadString = remember(totalMinutesSum, remainingSeconds) {
+        buildString {
+            if (totalMinutesSum > 0) {
+                append(totalMinutesSum)
+                append(" min")
+                if (totalMinutesSum > 1) append("s")
+                append(" ")
+            }
+            if (remainingSeconds > 0 || totalMinutesSum == 0) {
+                append(remainingSeconds)
+                append(" sec")
+                if (remainingSeconds > 1 || remainingSeconds == 0) append("s")
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1043,7 +1064,7 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Read $quranCount days • Total: $totalTime mins reading",
+                        text = "Read $quranCount sessions • Total: $totalReadString reading",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
@@ -1223,18 +1244,24 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                     // Auto-Log and Save button
                     Button(
                         onClick = {
-                            val elapsedMins = maxOf(1, timerSeconds / 60)
-                            // AUTO-LOG INSTANTLY WITHOUT POPUP DIALOGS!
+                            val elapsedMins = timerSeconds / 60
+                            val elapsedSecs = timerSeconds % 60
                             viewModel.addQuranProgress(
                                 surahName = selectedSurah,
                                 surahNum = surahNumber,
                                 start = 1,
                                 end = 1,
-                                duration = elapsedMins
+                                duration = elapsedMins,
+                                seconds = elapsedSecs
                             )
                             timerRunning = false
                             timerSeconds = 0
-                            Toast.makeText(context, "Logged $elapsedMins mins of Surah $selectedSurah automatically!", Toast.LENGTH_LONG).show()
+                            val durationToastStr = if (elapsedMins > 0) {
+                                "$elapsedMins mins $elapsedSecs secs"
+                            } else {
+                                "$elapsedSecs secs"
+                            }
+                            Toast.makeText(context, "Logged $durationToastStr of Surah $selectedSurah automatically!", Toast.LENGTH_LONG).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37)),
                         modifier = Modifier.weight(1.2f).height(40.dp).testTag("autolog_timer_btn"),
@@ -1345,12 +1372,32 @@ fun QuranScreen(viewModel: PrayerViewModel) {
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
+                                val durationText = remember(entry.durationMinutes, entry.durationSeconds, entry.startAyah, entry.endAyah) {
+                                    buildString {
+                                        append("Ayah ")
+                                        append(entry.startAyah)
+                                        append(" to ")
+                                        append(entry.endAyah)
+                                        append(" • Read: ")
+                                        if (entry.durationMinutes > 0 || entry.durationSeconds > 0) {
+                                            if (entry.durationMinutes > 0) {
+                                                append(entry.durationMinutes)
+                                                append(" min")
+                                                if (entry.durationMinutes > 1) append("s")
+                                                append(" ")
+                                            }
+                                            if (entry.durationSeconds > 0) {
+                                                append(entry.durationSeconds)
+                                                append(" sec")
+                                                if (entry.durationSeconds > 1) append("s")
+                                            }
+                                        } else {
+                                            append("0 secs")
+                                        }
+                                    }
+                                }
                                 Text(
-                                    text = if (entry.durationMinutes > 0) {
-                                        "Ayah ${entry.startAyah} to ${entry.endAyah} • Read: ${entry.durationMinutes} mins"
-                                    } else {
-                                        "Ayah ${entry.startAyah} to ${entry.endAyah}"
-                                    },
+                                    text = durationText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -1658,7 +1705,8 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                 modifier = Modifier
                     .fillMaxSize()
                     .rotate(-heading) // Rotate entire card relative to north
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .testTag("qibla_compass_dial"),
                 contentAlignment = Alignment.Center
             ) {
                 // North Marker
@@ -1677,25 +1725,45 @@ fun QiblaScreen(viewModel: PrayerViewModel) {
                 Text("W", style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterStart))
                 Text("S", style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.BottomCenter))
 
-                // The Golden Qibla Pointer rotates pointing to the Kaaba
+                // 1. Circumference indicator representing Mecca (Kaaba) at the exact bearing
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .rotate(bearing.toFloat()), // Turns arrow point direct to Mecca bearing
+                        .rotate(bearing.toFloat())
                 ) {
-                    // Golden Compass needle lies on the outer circumference, traveling to the precise Qibla position!
-                    Icon(
-                        Icons.Default.Navigation,
-                        contentDescription = "Qibla needle",
-                        tint = if (isAligned) Color(0xFF4CAF50) else Color(0xFFD4AF37), // Lit Green if aligned, otherwise Burnished Gold
+                    Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 16.dp)
-                            .size(56.dp)
-                            .rotate(-45f) // Rotated -45 deg so physical arrow tip points straight OUTWARDS towards the Kaaba (West)!
-                            .testTag("qibla_compass_needle")
-                    )
+                            .padding(top = 10.dp)
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1E1E1E))
+                            .border(1.5.dp, Color(0xFFD4AF37), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .background(Color(0xFFD4AF37))
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("كعبة", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    }
                 }
+
+                // 2. Central Yellow needle pointing directly outwards to the Kaaba position
+                Icon(
+                    imageVector = Icons.Default.Navigation,
+                    contentDescription = "Qibla pointer needle",
+                    tint = if (isAligned) Color(0xFF4CAF50) else Color(0xFFD4AF37),
+                    modifier = Modifier
+                        .size(80.dp)
+                        .rotate(bearing.toFloat() - 45f) // Turns arrow pointing directly to Mecca bearing in center (-45 is icon offset)
+                        .testTag("qibla_compass_needle")
+                )
             }
         }
 
@@ -1846,19 +1914,27 @@ fun StatsScreen(viewModel: PrayerViewModel) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 listOf(
-                    Triple("Fajr", allLogs.count { it.prayerName == "Fajr" && it.completed }, Color(0xFF33C08E)),
-                    Triple("Dhuhr", allLogs.count { it.prayerName == "Dhuhr" && it.completed }, Color(0xFFECC27E)),
-                    Triple("Asr", allLogs.count { it.prayerName == "Asr" && it.completed }, Color(0xFFC5A059)),
-                    Triple("Maghrib", allLogs.count { it.prayerName == "Maghrib" && it.completed }, Color(0xFF0F9D58)),
-                    Triple("Isha", allLogs.count { it.prayerName == "Isha" && it.completed }, Color(0xFF1B6A9F))
-                ).forEach { (pName, pCount, barColor) ->
+                    Pair("Fajr", Color(0xFF33C08E)),
+                    Pair("Dhuhr", Color(0xFFECC27E)),
+                    Pair("Asr", Color(0xFFC5A059)),
+                    Pair("Maghrib", Color(0xFF0F9D58)),
+                    Pair("Isha", Color(0xFF1B6A9F))
+                ).forEach { (pName, barColor) ->
+                    val pCount = allLogs.count { it.prayerName == pName && it.completed }
+                    val pMissed = allLogs.count { it.prayerName == pName && !it.completed }
                     Column(modifier = Modifier.padding(vertical = 4.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(pName, fontWeight = FontWeight.Bold)
-                            Text("$pCount prayed", fontWeight = FontWeight.Medium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("$pCount prayed", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                                if (pMissed > 0) {
+                                    Text("$pMissed missed", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         // Progress bar representation
@@ -1899,12 +1975,18 @@ fun StatsScreen(viewModel: PrayerViewModel) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Congregational", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                    Text("$congregationCount Jama'at", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("$congregationCount Jama'at", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Divider(modifier = Modifier.height(34.dp).width(1.dp))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Adjusted Logs", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                    Text("$qadaCount Qada", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("$qadaCount Qada", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Divider(modifier = Modifier.height(34.dp).width(1.dp))
+                val missedTotal = allLogs.count { !it.completed }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Not Prayed", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Text("$missedTotal Missed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -2572,7 +2654,8 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                         Triple("crimson_velvet", "Crimson Velvet", Color(0xFFFF5252)),
                         Triple("golden_oasis", "Golden Oasis", Color(0xFFFFB74D)),
                         Triple("rose_quartz", "Rose Quartz", Color(0xFFF06292)),
-                        Triple("amber_glow", "Amber Glow", Color(0xFFFFB300))
+                        Triple("amber_glow", "Amber Glow", Color(0xFFFFB300)),
+                        Triple("aurora_live", "Aurora Live", Color(0xFF1DE9B6))
                     ).forEach { (themeId, labelStr, themeColor) ->
                         Box(
                             modifier = Modifier

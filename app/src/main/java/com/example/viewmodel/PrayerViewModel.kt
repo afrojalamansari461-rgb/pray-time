@@ -497,7 +497,7 @@ class PrayerViewModel(
     }
 
     // Add Quran tracking progress
-    fun addQuranProgress(surahName: String, surahNum: Int, start: Int, end: Int, duration: Int) {
+    fun addQuranProgress(surahName: String, surahNum: Int, start: Int, end: Int, duration: Int, seconds: Int = 0) {
         viewModelScope.launch(Dispatchers.IO) {
             quranRepo.insertProgress(
                 QuranProgress(
@@ -506,7 +506,8 @@ class PrayerViewModel(
                     surahNumber = surahNum,
                     startAyah = start,
                     endAyah = end,
-                    durationMinutes = duration
+                    durationMinutes = duration,
+                    durationSeconds = seconds
                 )
             )
         }
@@ -783,14 +784,16 @@ class PrayerViewModel(
                     SensorManager.getOrientation(rotationMatrix, orientationValues)
                     // azimuth: rotation around the Z axis
                     val azimuthRad = orientationValues[0]
-                    val azimuthDeg = Math.toDegrees(azimuthRad.toDouble())
+                    val azimuthDegRaw = Math.toDegrees(azimuthRad.toDouble())
+                    val azimuthDeg = (azimuthDegRaw + 360.0) % 360.0
                     deviceHeading.value = azimuthDeg.toFloat()
                 }
             } else if (event.sensor.type == Sensor.TYPE_ORIENTATION) {
                 val values = event.values
                 if (values.isNotEmpty()) {
-                    val azimuthDeg = values[0]
-                    deviceHeading.value = azimuthDeg
+                    val azimuthDegRaw = values[0].toDouble()
+                    val azimuthDeg = (azimuthDegRaw + 360.0) % 360.0
+                    deviceHeading.value = azimuthDeg.toFloat()
                 }
             }
         } catch (e: Throwable) {
@@ -843,6 +846,7 @@ class PrayerViewModel(
                     put("startAyah", q.startAyah)
                     put("endAyah", q.endAyah)
                     put("durationMinutes", q.durationMinutes)
+                    put("durationSeconds", q.durationSeconds)
                     put("timestamp", q.timestamp)
                 }
                 quranArray.put(qObj)
@@ -895,6 +899,7 @@ class PrayerViewModel(
                             startAyah = qObj.getInt("startAyah"),
                             endAyah = qObj.getInt("endAyah"),
                             durationMinutes = qObj.optInt("durationMinutes", 0),
+                            durationSeconds = qObj.optInt("durationSeconds", 0),
                             timestamp = qObj.optLong("timestamp", System.currentTimeMillis())
                         )
                     )
