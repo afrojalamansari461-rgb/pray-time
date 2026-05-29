@@ -34,6 +34,23 @@ object AlarmScheduler {
         val mOff = prefs.getInt("maghrib_offset", 0)
         val iOff = prefs.getInt("isha_offset", 0)
 
+        val fIqamah = prefs.getInt("fajr_iqamah_delay", 15)
+        val dIqamah = prefs.getInt("dhuhr_iqamah_delay", 15)
+        val aIqamah = prefs.getInt("asr_iqamah_delay", 15)
+        val mIqamah = prefs.getInt("maghrib_iqamah_delay", 10)
+        val iIqamah = prefs.getInt("isha_iqamah_delay", 15)
+
+        val fajrOverrideAdhan = prefs.getString("fajr_override_adhan", "") ?: ""
+        val fajrOverrideNamaj = prefs.getString("fajr_override_namaj", "") ?: ""
+        val dhuhrOverrideAdhan = prefs.getString("dhuhr_override_adhan", "") ?: ""
+        val dhuhrOverrideNamaj = prefs.getString("dhuhr_override_namaj", "") ?: ""
+        val asrOverrideAdhan = prefs.getString("asr_override_adhan", "") ?: ""
+        val asrOverrideNamaj = prefs.getString("asr_override_namaj", "") ?: ""
+        val maghribOverrideAdhan = prefs.getString("maghrib_override_adhan", "") ?: ""
+        val maghribOverrideNamaj = prefs.getString("maghrib_override_namaj", "") ?: ""
+        val ishaOverrideAdhan = prefs.getString("isha_override_adhan", "") ?: ""
+        val ishaOverrideNamaj = prefs.getString("isha_override_namaj", "") ?: ""
+
         val baseTimes = PrayerTimeCalculator.calculate(
             latitude = latitude,
             longitude = longitude,
@@ -45,7 +62,7 @@ object AlarmScheduler {
         fun adjustTime(timeStr: String, offsetMinutes: Int): String {
             if (timeStr.isEmpty()) return ""
             try {
-                val parts = timeStr.split(":")
+                val parts = timeStr.trim().split(":")
                 if (parts.size != 2) return timeStr
                 val hrs = parts[0].toIntOrNull() ?: return timeStr
                 val mins = parts[1].toIntOrNull() ?: return timeStr
@@ -58,23 +75,53 @@ object AlarmScheduler {
             }
         }
 
+        fun getEventsForDay(cal: Calendar, bt: com.example.utils.PrayerTimeCalculator.PrayerTimes): List<Pair<String, String>> {
+            val fAd = if (fajrOverrideAdhan.isNotEmpty()) fajrOverrideAdhan else adjustTime(bt.fajr, fOff)
+            val fNm = if (fajrOverrideNamaj.isNotEmpty()) fajrOverrideNamaj else adjustTime(fAd, fIqamah)
+
+            val dAd = if (dhuhrOverrideAdhan.isNotEmpty()) dhuhrOverrideAdhan else adjustTime(bt.dhuhr, dOff)
+            val dNm = if (dhuhrOverrideNamaj.isNotEmpty()) dhuhrOverrideNamaj else adjustTime(dAd, dIqamah)
+
+            val aAd = if (asrOverrideAdhan.isNotEmpty()) asrOverrideAdhan else adjustTime(bt.asr, aOff)
+            val aNm = if (asrOverrideNamaj.isNotEmpty()) asrOverrideNamaj else adjustTime(aAd, aIqamah)
+
+            val mAd = if (maghribOverrideAdhan.isNotEmpty()) maghribOverrideAdhan else adjustTime(bt.maghrib, mOff)
+            val mNm = if (maghribOverrideNamaj.isNotEmpty()) maghribOverrideNamaj else adjustTime(mAd, mIqamah)
+
+            val iAd = if (ishaOverrideAdhan.isNotEmpty()) ishaOverrideAdhan else adjustTime(bt.isha, iOff)
+            val iNm = if (ishaOverrideNamaj.isNotEmpty()) ishaOverrideNamaj else adjustTime(iAd, iIqamah)
+
+            val ishraq = adjustTime(bt.sunrise, 15)
+            val awabin = adjustTime(bt.maghrib, 15)
+
+            return listOf(
+                "Tahajjud Namaj" to "02:00",
+                "Fajr Adhan" to fAd,
+                "Fajr Namaj" to fNm,
+                "Ishraq Namaj" to ishraq,
+                "Duha Namaj" to "08:30",
+                "Dhuhr Adhan" to dAd,
+                "Dhuhr Namaj" to dNm,
+                "Asr Adhan" to aAd,
+                "Asr Namaj" to aNm,
+                "Maghrib Adhan" to mAd,
+                "Maghrib Namaj" to mNm,
+                "Awabin Namaj" to awabin,
+                "Isha Adhan" to iAd,
+                "Isha Namaj" to iNm
+            )
+        }
+
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dateString = format.format(calendar.time)
 
-        // Maps prayer name to its HH:mm string format with user adjustments applied
-        val list = listOf(
-            "Fajr" to adjustTime(baseTimes.fajr, fOff),
-            "Dhuhr" to adjustTime(baseTimes.dhuhr, dOff),
-            "Asr" to adjustTime(baseTimes.asr, aOff),
-            "Maghrib" to adjustTime(baseTimes.maghrib, mOff),
-            "Isha" to adjustTime(baseTimes.isha, iOff)
-        )
+        val todayEvents = getEventsForDay(calendar, baseTimes)
 
         var scheduledPrayerName = ""
         var scheduledTimeMillis = 0L
 
-        // Find the first upcoming prayer for today
-        for ((name, timeStr) in list) {
+        // Find the first upcoming prayer/event for today
+        for ((name, timeStr) in todayEvents) {
             val prayerTime = parseTimeToMillis(calendar, timeStr)
             if (prayerTime > now) {
                 scheduledPrayerName = name
@@ -83,7 +130,7 @@ object AlarmScheduler {
             }
         }
 
-        // If all prayers today have passed, schedule Fajr for tomorrow
+        // If all prayers today have passed, schedule the first upcoming event for tomorrow
         if (scheduledTimeMillis == 0L) {
             val tomorrowCalendar = Calendar.getInstance().apply { add(Calendar.DATE, 1) }
             val tomorrowTimes = PrayerTimeCalculator.calculate(
@@ -93,9 +140,15 @@ object AlarmScheduler {
                 calendar = tomorrowCalendar,
                 asrSchool = asrSchool
             )
-            scheduledPrayerName = "Fajr"
-            val adjustedTomorrowFajr = adjustTime(tomorrowTimes.fajr, fOff)
-            scheduledTimeMillis = parseTimeToMillis(tomorrowCalendar, adjustedTomorrowFajr)
+            val tomorrowEvents = getEventsForDay(tomorrowCalendar, tomorrowTimes)
+            for ((name, timeStr) in tomorrowEvents) {
+                val prayerTime = parseTimeToMillis(tomorrowCalendar, timeStr)
+                if (prayerTime > now) {
+                    scheduledPrayerName = name
+                    scheduledTimeMillis = prayerTime
+                    break
+                }
+            }
         }
 
         // Write to SharedPreferences so the UI knows which one is scheduled

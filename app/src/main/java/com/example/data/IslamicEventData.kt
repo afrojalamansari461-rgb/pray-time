@@ -235,4 +235,22 @@ object IslamicEventData {
             isMajor = false
         )
     )
+
+    fun getAdjustedEvents(isSouthAsian: Boolean): List<IslamicEvent> {
+        if (!isSouthAsian) return EVENTS
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return EVENTS.map { event ->
+            try {
+                val date = sdf.parse(event.dateStr) ?: return@map event
+                val cal = java.util.Calendar.getInstance().apply {
+                    time = date
+                    add(java.util.Calendar.DAY_OF_YEAR, 1)
+                }
+                val newDateStr = sdf.format(cal.time)
+                event.copy(dateStr = newDateStr)
+            } catch (e: Exception) {
+                event
+            }
+        }
+    }
 }

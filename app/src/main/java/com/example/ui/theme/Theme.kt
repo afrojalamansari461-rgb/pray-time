@@ -194,9 +194,26 @@ private val NebulaColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF261936)
 )
 
+private val IvoryColorScheme = darkColorScheme(
+    primary = Color(0xFFFFFDD0), // Classic warm ivory
+    onPrimary = Color(0xFF252412),
+    primaryContainer = Color(0xFF49452E), // Dark ivory tint
+    onPrimaryContainer = Color(0xFFFFFDD0),
+    secondary = Color(0xFFE9E4CB), // Alabaster/Linen bone
+    tertiary = Color(0xFFF5F2D0), // Soft cream
+    background = Color(0xFF13120E), // Soft dark charcoal with ivory tone
+    surface = Color(0xFF201E17), // Rich coffee/parchment charcoal
+    onBackground = Color(0xFFFAF8F5), // Glowing white ivory
+    onSurface = Color(0xFFFAF8F5),
+    surfaceVariant = Color(0xFF343126),
+    onSurfaceVariant = Color(0xFFE6E1D3),
+    outline = Color(0xFFA09983),
+    outlineVariant = Color(0xFF29261E)
+)
+
 @Composable
 fun Modifier.animatedGradientBackground(themeName: String): Modifier {
-    if (themeName != "aurora_live" && themeName != "nebula_live") return this
+    if (themeName != "aurora_live" && themeName != "nebula_live" && themeName != "ivory_glow") return this
     val infiniteTransition = rememberInfiniteTransition(label = "bgSweep")
     val animProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -209,21 +226,25 @@ fun Modifier.animatedGradientBackground(themeName: String): Modifier {
     )
 
     return this.drawBehind {
-        val color1 = if (themeName == "aurora_live") Color(0xFF050B09) else Color(0xFF090410)
-        val accent1 = if (themeName == "aurora_live") {
-            Color(0xFF1DE9B6).copy(alpha = 0.14f * animProgress)
-        } else {
-            Color(0xFFE040FB).copy(alpha = 0.15f * animProgress)
+        val color1 = when (themeName) {
+            "aurora_live" -> Color(0xFF050B09)
+            "ivory_glow" -> Color(0xFF100F0C)
+            else -> Color(0xFF090410)
         }
-        val accent2 = if (themeName == "aurora_live") {
-            Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
-        } else {
-            Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
+        val accent1 = when (themeName) {
+            "aurora_live" -> Color(0xFF1DE9B6).copy(alpha = 0.14f * animProgress)
+            "ivory_glow" -> Color(0xFFFFFDD0).copy(alpha = 0.16f * animProgress)
+            else -> Color(0xFFE040FB).copy(alpha = 0.15f * animProgress)
         }
-        val accent3 = if (themeName == "aurora_live") {
-            Color(0xFF00ACC1).copy(alpha = 0.08f * animProgress)
-        } else {
-            Color(0xFFFF4081).copy(alpha = 0.09f * animProgress)
+        val accent2 = when (themeName) {
+            "aurora_live" -> Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
+            "ivory_glow" -> Color(0xFFE9E4CB).copy(alpha = 0.12f * (1f - animProgress))
+            else -> Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
+        }
+        val accent3 = when (themeName) {
+            "aurora_live" -> Color(0xFF00ACC1).copy(alpha = 0.08f * animProgress)
+            "ivory_glow" -> Color(0xFFF5F2D0).copy(alpha = 0.09f * animProgress)
+            else -> Color(0xFFFF4081).copy(alpha = 0.09f * animProgress)
         }
 
         // Draw deep base background
@@ -262,6 +283,7 @@ fun MyApplicationTheme(
     "amber_glow" -> AmberColorScheme
     "aurora_live" -> AuroraColorScheme
     "nebula_live" -> NebulaColorScheme
+    "ivory_glow" -> IvoryColorScheme
     else -> DarkColorScheme
   }
 

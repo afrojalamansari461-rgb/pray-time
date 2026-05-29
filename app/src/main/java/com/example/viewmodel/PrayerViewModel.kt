@@ -67,6 +67,12 @@ class PrayerViewModel(
     val loggedInEmail = MutableStateFlow(prefs.getString("logged_in_email", "") ?: "")
     val loggedInAddress = MutableStateFlow(prefs.getString("logged_in_address", "") ?: "")
     val isLoggingEnabled = MutableStateFlow(prefs.getBoolean("is_logging_enabled", true))
+    val isSouthAsianSighting = MutableStateFlow(prefs.getBoolean("is_south_asian_sighting", true))
+
+    fun updateSouthAsianSighting(enabled: Boolean) {
+        isSouthAsianSighting.value = enabled
+        prefs.edit().putBoolean("is_south_asian_sighting", enabled).apply()
+    }
 
     fun loginOrSignUp(username: String, email: String) {
         prefs.edit().apply {
@@ -82,18 +88,19 @@ class PrayerViewModel(
 
     fun signUpUser(username: String, email: String, passwordSecured: String, isLoggingEnabledInput: Boolean): Boolean {
         val normalizedEmail = email.lowercase().trim()
+        val trimmedPassword = passwordSecured.trim()
         if (prefs.getBoolean("reg_exists_$normalizedEmail", false)) {
             return false // Already exists
         }
         prefs.edit().apply {
             putBoolean("reg_exists_$normalizedEmail", true)
             putString("reg_name_$normalizedEmail", username.trim())
-            putString("reg_pwd_$normalizedEmail", passwordSecured)
+            putString("reg_pwd_$normalizedEmail", trimmedPassword)
             putBoolean("reg_logging_enabled_$normalizedEmail", isLoggingEnabledInput)
-            apply()
+            commit() // Force synchronous persistence to disk and memory for immediate availability
         }
         // Auto sign in on registration success
-        loginUser(normalizedEmail, passwordSecured)
+        loginUser(normalizedEmail, trimmedPassword)
         return true
     }
 
@@ -144,12 +151,13 @@ class PrayerViewModel(
 
     fun loginUser(email: String, passwordSecured: String): String? {
         val normalizedEmail = email.lowercase().trim()
+        val trimmedPassword = passwordSecured.trim()
         val exists = prefs.getBoolean("reg_exists_$normalizedEmail", false)
         if (!exists) {
             return "No account found. Check email or Create Account."
         }
         val storedPwd = prefs.getString("reg_pwd_$normalizedEmail", "") ?: ""
-        if (storedPwd != passwordSecured) {
+        if (storedPwd != trimmedPassword) {
             return "Incorrect password."
         }
         val storedName = prefs.getString("reg_name_$normalizedEmail", "") ?: normalizedEmail.substringBefore("@")
@@ -162,7 +170,7 @@ class PrayerViewModel(
             putString("logged_in_email", normalizedEmail)
             putString("logged_in_address", storedAddress)
             putBoolean("is_logging_enabled", storedLoggingEnabled)
-            apply()
+            commit() // Force synchronous persistence
         }
         isLoggedIn.value = true
         loggedInUser.value = storedName
@@ -189,7 +197,7 @@ class PrayerViewModel(
             putString("logged_in_email", "")
             putString("logged_in_address", "")
             putBoolean("is_logging_enabled", true)
-            apply()
+            commit() // Force synchronous persistence
         }
         isLoggedIn.value = false
         loggedInUser.value = ""
@@ -233,7 +241,7 @@ class PrayerViewModel(
 
     fun updateAdhanOverride(prayer: String, timeStr: String) {
         val p = prayer.lowercase().trim()
-        prefs.edit().putString("${p}_override_adhan", timeStr).apply()
+        prefs.edit().putString("${p}_override_adhan", timeStr).commit() // Force immediate sync
         when (p) {
             "fajr" -> fajrOverrideAdhan.value = timeStr
             "dhuhr" -> dhuhrOverrideAdhan.value = timeStr
@@ -242,11 +250,13 @@ class PrayerViewModel(
             "isha" -> ishaOverrideAdhan.value = timeStr
         }
         _overrideTrigger.value++
+        // Reschedule alarms immediately based on new adhan time
+        AlarmScheduler.scheduleNextPrayer(context, latitude.value, longitude.value, asrSchool.value)
     }
 
     fun updateNamajOverride(prayer: String, timeStr: String) {
         val p = prayer.lowercase().trim()
-        prefs.edit().putString("${p}_override_namaj", timeStr).apply()
+        prefs.edit().putString("${p}_override_namaj", timeStr).commit() // Force immediate sync
         when (p) {
             "fajr" -> fajrOverrideNamaj.value = timeStr
             "dhuhr" -> dhuhrOverrideNamaj.value = timeStr
@@ -255,6 +265,8 @@ class PrayerViewModel(
             "isha" -> ishaOverrideNamaj.value = timeStr
         }
         _overrideTrigger.value++
+        // Reschedule alarms immediately based on new namaj time
+        AlarmScheduler.scheduleNextPrayer(context, latitude.value, longitude.value, asrSchool.value)
     }
 
     fun getQueueDelayForPrayer(prayer: String, date: String): Int {
@@ -297,7 +309,7 @@ class PrayerViewModel(
         }
     }
 
-    private fun adjustTime(timeStr: String, offsetMinutes: Int): String {
+    fun adjustTime(timeStr: String, offsetMinutes: Int): String {
         if (timeStr.isEmpty()) return ""
         try {
             val parts = timeStr.split(":")
@@ -545,6 +557,16 @@ class PrayerViewModel(
         longitude.value = lon
         locationLabel.value = label
 
+        // Auto-detect India / South Asian sighting region offset
+        val isIndia = label.contains("India", ignoreCase = true) || 
+                      label.contains("Delhi", ignoreCase = true) || 
+                      label.contains("Mumbai", ignoreCase = true) || 
+                      label.contains("Kolkata", ignoreCase = true) || 
+                      label.contains("Chennai", ignoreCase = true) || 
+                      label.contains("Bangalore", ignoreCase = true) || 
+                      label.contains("Hyderabad", ignoreCase = true)
+        updateSouthAsianSighting(isIndia)
+
         prefs.edit().apply {
             putFloat("latitude", lat.toFloat())
             putFloat("longitude", lon.toFloat())
@@ -687,52 +709,128 @@ class PrayerViewModel(
             while (true) {
                 val cal = Calendar.getInstance()
                 val now = cal.timeInMillis
-                
-                // Get times for today
                 val offset = (cal.timeZone.rawOffset + cal.timeZone.dstSavings).toDouble() / 3600000.0
-                val times = PrayerTimeCalculator.calculate(
+
+                val fOff = fajrOffset.value
+                val sOff = sunriseOffset.value
+                val dOff = dhuhrOffset.value
+                val aOff = asrOffset.value
+                val mOff = maghribOffset.value
+                val iOff = ishaOffset.value
+
+                val fIq = fajrIqamahDelay.value
+                val dIq = dhuhrIqamahDelay.value
+                val aIq = asrIqamahDelay.value
+                val mIq = maghribIqamahDelay.value
+                val iIq = ishaIqamahDelay.value
+
+                val fAdOver = fajrOverrideAdhan.value
+                val fNmOver = fajrOverrideNamaj.value
+                val dAdOver = dhuhrOverrideAdhan.value
+                val dNmOver = dhuhrOverrideNamaj.value
+                val aAdOver = asrOverrideAdhan.value
+                val aNmOver = asrOverrideNamaj.value
+                val mAdOver = maghribOverrideAdhan.value
+                val mNmOver = maghribOverrideNamaj.value
+                val iAdOver = ishaOverrideAdhan.value
+                val iNmOver = ishaOverrideNamaj.value
+
+                val baseTimes = PrayerTimeCalculator.calculate(
                     latitude.value, longitude.value, offset, cal, asrSchool.value, fajrAngle.value, ishaAngle.value
                 )
 
-                val list = listOf(
-                    "Fajr" to times.fajr,
-                    "Sunrise" to times.sunrise,
-                    "Dhuhr" to times.dhuhr,
-                    "Asr" to times.asr,
-                    "Maghrib" to times.maghrib,
-                    "Isha" to times.isha
-                )
+                fun adjust(timeStr: String, offsetMinutes: Int): String {
+                    if (timeStr.isEmpty()) return ""
+                    try {
+                        val parts = timeStr.trim().split(":")
+                        if (parts.size != 2) return timeStr
+                        val hrs = parts[0].toIntOrNull() ?: return timeStr
+                        val mins = parts[1].toIntOrNull() ?: return timeStr
+                        val totalMinutes = (hrs * 60 + mins + offsetMinutes + 1440) % 1440
+                        val newHrs = totalMinutes / 60
+                        val newMins = totalMinutes % 60
+                        return String.format("%02d:%02d", newHrs, newMins)
+                    } catch (e: Exception) {
+                        return timeStr
+                    }
+                }
 
-                var nextPrayerName = ""
-                var nextPrayerTimeMillis = 0L
+                fun buildEvents(bt: com.example.utils.PrayerTimeCalculator.PrayerTimes): List<Pair<String, String>> {
+                    val fAd = if (fAdOver.isNotEmpty()) fAdOver else adjust(bt.fajr, fOff)
+                    val fNm = if (fNmOver.isNotEmpty()) fNmOver else adjust(fAd, fIq)
 
-                for ((name, timeStr) in list) {
+                    val dAd = if (dAdOver.isNotEmpty()) dAdOver else adjust(bt.dhuhr, dOff)
+                    val dNm = if (dNmOver.isNotEmpty()) dNmOver else adjust(dAd, dIq)
+
+                    val aAd = if (aAdOver.isNotEmpty()) aAdOver else adjust(bt.asr, aOff)
+                    val aNm = if (aNmOver.isNotEmpty()) aNmOver else adjust(aAd, aIq)
+
+                    val mAd = if (mAdOver.isNotEmpty()) mAdOver else adjust(bt.maghrib, mOff)
+                    val mNm = if (mNmOver.isNotEmpty()) mNmOver else adjust(mAd, mIq)
+
+                    val iAd = if (iAdOver.isNotEmpty()) iAdOver else adjust(bt.isha, iOff)
+                    val iNm = if (iNmOver.isNotEmpty()) iNmOver else adjust(iAd, iIq)
+
+                    val ishraq = adjust(bt.sunrise, 15)
+                    val awabin = adjust(bt.maghrib, 15)
+
+                    return listOf(
+                        "Tahajjud Namaj" to "02:00",
+                        "Fajr Adhan" to fAd,
+                        "Fajr Namaj" to fNm,
+                        "Ishraq Namaj" to ishraq,
+                        "Duha Namaj" to "08:30",
+                        "Dhuhr Adhan" to dAd,
+                        "Dhuhr Namaj" to dNm,
+                        "Asr Adhan" to aAd,
+                        "Asr Namaj" to aNm,
+                        "Maghrib Adhan" to mAd,
+                        "Maghrib Namaj" to mNm,
+                        "Awabin Namaj" to awabin,
+                        "Isha Adhan" to iAd,
+                        "Isha Namaj" to iNm
+                    )
+                }
+
+                val todayEvents = buildEvents(baseTimes)
+                var nextName = ""
+                var nextTimeMillis = 0L
+
+                // Find next upcoming event today
+                for ((name, timeStr) in todayEvents) {
                     val pMillis = parseTimeToMillis(cal, timeStr)
                     if (pMillis > now) {
-                        nextPrayerName = name
-                        nextPrayerTimeMillis = pMillis
+                        nextName = name
+                        nextTimeMillis = pMillis
                         break
                     }
                 }
 
-                if (nextPrayerTimeMillis == 0L) {
-                    // Fajr is tomorrow
+                // If none left today, schedule next tomorrow
+                if (nextTimeMillis == 0L) {
                     val tomorrowCal = Calendar.getInstance().apply { add(Calendar.DATE, 1) }
                     val tomorrowTimes = PrayerTimeCalculator.calculate(
                         latitude.value, longitude.value, offset, tomorrowCal, asrSchool.value, fajrAngle.value, ishaAngle.value
                     )
-                    nextPrayerName = "Fajr (Tomorrow)"
-                    nextPrayerTimeMillis = parseTimeToMillis(tomorrowCal, tomorrowTimes.fajr)
+                    val tomorrowEvents = buildEvents(tomorrowTimes)
+                    for ((name, timeStr) in tomorrowEvents) {
+                        val pMillis = parseTimeToMillis(tomorrowCal, timeStr)
+                        if (pMillis > now) {
+                            nextName = "$name (Tomorrow)"
+                            nextTimeMillis = pMillis
+                            break
+                        }
+                    }
                 }
 
-                val diffSec = (nextPrayerTimeMillis - now) / 1000
+                val diffSec = (nextTimeMillis - now) / 1000
                 if (diffSec >= 0) {
                     val hh = diffSec / 3600
                     val mm = (diffSec % 3600) / 60
                     val ss = diffSec % 60
                     
                     val countdownStr = String.format("%02d:%02d:%02d", hh, mm, ss)
-                    nextPrayerInfo.value = nextPrayerName to countdownStr
+                    nextPrayerInfo.value = nextName to countdownStr
                 }
                 delay(1000)
             }

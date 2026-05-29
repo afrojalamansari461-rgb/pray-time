@@ -35,6 +35,10 @@ import java.util.*
 fun CalendarScreen(viewModel: PrayerViewModel) {
     val context = LocalContext.current
     val reminders by viewModel.eventReminders.collectAsState()
+    val isSouthAsian by viewModel.isSouthAsianSighting.collectAsState()
+    val allEvents = remember(isSouthAsian) {
+        IslamicEventData.getAdjustedEvents(isSouthAsian)
+    }
     var viewModeAllEvents by remember { mutableStateOf(false) }
 
     // Browse states defaulting to current year & month
@@ -70,7 +74,7 @@ fun CalendarScreen(viewModel: PrayerViewModel) {
     val monthName = SimpleDateFormat("MMMM", Locale.getDefault()).format(cal.time)
 
     // Filter events occurring in this specific month/year
-    val eventsThisMonth = IslamicEventData.EVENTS.filter { event ->
+    val eventsThisMonth = allEvents.filter { event ->
         try {
             val dateParts = event.dateStr.split("-")
             val evYear = dateParts[0].toInt()
@@ -153,10 +157,60 @@ fun CalendarScreen(viewModel: PrayerViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "All Year Events (${IslamicEventData.EVENTS.size})",
+                    text = "All Year Events (${allEvents.size})",
                     fontWeight = FontWeight.Bold,
                     color = if (viewModeAllEvents) MaterialTheme.colorScheme.onPrimary else Color.White.copy(alpha = 0.6f),
                     fontSize = 13.sp
+                )
+            }
+        }
+
+        // Moon Sighting Region selector
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Holidays Sighting:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            
+            // Saudi Chip
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (!isSouthAsian) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color(0xFF2B2930).copy(alpha = 0.6f))
+                    .border(1.dp, if (!isSouthAsian) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
+                    .clickable { viewModel.updateSouthAsianSighting(false) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Global / Saudi Arabia",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (!isSouthAsian) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                )
+            }
+            
+            // India/South Asia Sighting (+1d)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (isSouthAsian) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f) else Color(0xFF2B2930).copy(alpha = 0.6f))
+                    .border(1.dp, if (isSouthAsian) MaterialTheme.colorScheme.secondary else Color.Transparent, RoundedCornerShape(12.dp))
+                    .clickable { viewModel.updateSouthAsianSighting(true) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "India / South Asia (+1d)",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isSouthAsian) MaterialTheme.colorScheme.secondary else Color.White.copy(alpha = 0.6f)
                 )
             }
         }
@@ -284,7 +338,7 @@ fun CalendarScreen(viewModel: PrayerViewModel) {
                                     val dayStr = if (dayNumber < 10) "0$dayNumber" else dayNumber.toString()
                                     val monthStr = if (selectedMonthIndex + 1 < 10) "0${selectedMonthIndex + 1}" else (selectedMonthIndex + 1).toString()
                                     val searchDate = "$selectedYear-$monthStr-$dayStr"
-                                    val eventOnDay = IslamicEventData.EVENTS.find { it.dateStr == searchDate }
+                                    val eventOnDay = allEvents.find { it.dateStr == searchDate }
 
                                     val isToday = today.get(Calendar.YEAR) == selectedYear &&
                                                   today.get(Calendar.MONTH) == selectedMonthIndex &&
@@ -314,7 +368,7 @@ fun CalendarScreen(viewModel: PrayerViewModel) {
                 val mStr = if (selectedMonthIndex + 1 < 10) "0${selectedMonthIndex + 1}" else (selectedMonthIndex + 1).toString()
                 val selectedDayStr = "$selectedYear-$mStr-$dStr"
 
-                val selectedDayEvent = IslamicEventData.EVENTS.find { it.dateStr == selectedDayStr }
+                val selectedDayEvent = allEvents.find { it.dateStr == selectedDayStr }
 
                 Card(
                     modifier = Modifier
@@ -490,8 +544,8 @@ fun CalendarScreen(viewModel: PrayerViewModel) {
                 singleLine = true
             )
 
-            val filteredAllEvents = remember(searchQuery) {
-                val sorted = IslamicEventData.EVENTS.sortedBy { it.dateStr }
+            val filteredAllEvents = remember(searchQuery, allEvents) {
+                val sorted = allEvents.sortedBy { it.dateStr }
                 if (searchQuery.isBlank()) {
                     sorted
                 } else {

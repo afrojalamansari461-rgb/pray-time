@@ -335,14 +335,61 @@ fun PrayersScreen(
 
         // --- COUNTDOWN / LIVE TIMER BANNER (Elegant Dark Custom Card) ---
         val nextPrayerName = nextInfo.first
-        val nextPrayerTime = when (nextPrayerName.lowercase()) {
-            "fajr" -> times.fajr
-            "sunrise" -> times.sunrise
-            "dhuhr" -> times.dhuhr
-            "asr" -> times.asr
-            "maghrib" -> times.maghrib
-            "isha" -> times.isha
-            else -> "--:--"
+        val nextPrayerTime = remember(nextPrayerName, times) {
+            val nameClean = nextPrayerName.replace(" (Tomorrow)", "").trim()
+            when (nameClean) {
+                "Fajr Adhan" -> times.fajr
+                "Fajr Namaj" -> {
+                    if (viewModel.fajrOverrideNamaj.value.isNotEmpty()) viewModel.fajrOverrideNamaj.value
+                    else {
+                        val adhan = if (viewModel.fajrOverrideAdhan.value.isNotEmpty()) viewModel.fajrOverrideAdhan.value else times.fajr
+                        viewModel.adjustTime(adhan, viewModel.fajrIqamahDelay.value)
+                    }
+                }
+                "Ishraq Namaj" -> viewModel.adjustTime(times.sunrise, 15)
+                "Duha Namaj" -> "08:30"
+                "Dhuhr Adhan" -> times.dhuhr
+                "Dhuhr Namaj" -> {
+                    if (viewModel.dhuhrOverrideNamaj.value.isNotEmpty()) viewModel.dhuhrOverrideNamaj.value
+                    else {
+                        val adhan = if (viewModel.dhuhrOverrideAdhan.value.isNotEmpty()) viewModel.dhuhrOverrideAdhan.value else times.dhuhr
+                        viewModel.adjustTime(adhan, viewModel.dhuhrIqamahDelay.value)
+                    }
+                }
+                "Asr Adhan" -> times.asr
+                "Asr Namaj" -> {
+                    if (viewModel.asrOverrideNamaj.value.isNotEmpty()) viewModel.asrOverrideNamaj.value
+                    else {
+                        val adhan = if (viewModel.asrOverrideAdhan.value.isNotEmpty()) viewModel.asrOverrideAdhan.value else times.asr
+                        viewModel.adjustTime(adhan, viewModel.asrIqamahDelay.value)
+                    }
+                }
+                "Maghrib Adhan" -> times.maghrib
+                "Maghrib Namaj" -> {
+                    if (viewModel.maghribOverrideNamaj.value.isNotEmpty()) viewModel.maghribOverrideNamaj.value
+                    else {
+                        val adhan = if (viewModel.maghribOverrideAdhan.value.isNotEmpty()) viewModel.maghribOverrideAdhan.value else times.maghrib
+                        viewModel.adjustTime(adhan, viewModel.maghribIqamahDelay.value)
+                    }
+                }
+                "Awabin Namaj" -> viewModel.adjustTime(times.maghrib, 15)
+                "Isha Adhan" -> times.isha
+                "Isha Namaj" -> {
+                    if (viewModel.ishaOverrideNamaj.value.isNotEmpty()) viewModel.ishaOverrideNamaj.value
+                    else {
+                        val adhan = if (viewModel.ishaOverrideAdhan.value.isNotEmpty()) viewModel.ishaOverrideAdhan.value else times.isha
+                        viewModel.adjustTime(adhan, viewModel.ishaIqamahDelay.value)
+                    }
+                }
+                "Tahajjud Namaj" -> "02:00"
+                "Fajr" -> times.fajr
+                "Sunrise" -> times.sunrise
+                "Dhuhr" -> times.dhuhr
+                "Asr" -> times.asr
+                "Maghrib" -> times.maghrib
+                "Isha" -> times.isha
+                else -> "--:--"
+            }
         }
 
         Card(
@@ -449,7 +496,7 @@ fun PrayersScreen(
             }
         }
 
-        // --- DASHBOARD GRID CARDS (Daily Quran & Prayer Log) ---
+        // --- DASHBOARD GRID CARDS (Daily Quran & Prayer Log / Daily Supplication) ---
         val lastReadSurah = quranEntries.firstOrNull()?.surahName ?: "Surah Al-Fatihah"
         val quranProgressFrac = if (quranEntries.isNotEmpty()) 0.65f else 0.1f
         val completionRate = if (allLogs.isNotEmpty()) (allLogs.count { it.completed }.toFloat() / allLogs.size.toFloat() * 100).toInt() else 0
@@ -509,39 +556,117 @@ fun PrayersScreen(
                 }
             }
 
-            // Prayer Log Card
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(112.dp)
-                    .clickable { onNavigateToStats() },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2930)),
-                border = BorderStroke(1.dp, Color(0xFF49454F))
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+            if (isLoggingEnabled) {
+                // Prayer Log Card (Visible only when logging is enabled)
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(112.dp)
+                        .clickable { onNavigateToStats() },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2B2930)),
+                    border = BorderStroke(1.dp, Color(0xFF49454F))
                 ) {
-                    Text(
-                        text = "Prayer Log",
-                        fontSize = 12.sp,
-                        color = Color(0xFFCAC4D0),
-                        fontWeight = FontWeight.Medium
-                    )
-                    Column {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "$displayPct Rate",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = if (completionRate > 50) "+5% from yesterday" else "Consistent spirit",
-                            fontSize = 11.sp,
-                            color = Color(0xFF4CAF50),
+                            text = "Prayer Log",
+                            fontSize = 12.sp,
+                            color = Color(0xFFCAC4D0),
                             fontWeight = FontWeight.Medium
                         )
+                        Column {
+                            Text(
+                                text = "$displayPct Rate",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = if (completionRate > 50) "+5% from yesterday" else "Consistent spirit",
+                                fontSize = 11.sp,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Tailored Morning/Evening Supplication or Daily Wisdom Card
+                val isMorningDua = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 4..11
+                val isAfternoonDua = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 12..17
+
+                val selectedDuaOrHadith = if (isMorningDua) {
+                    Triple(
+                        "Morning Supplication",
+                        "الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا",
+                        "Praise be to Allah who gave us life after death."
+                    )
+                } else if (isAfternoonDua) {
+                    Triple(
+                        "Knowledge & Wisdom",
+                        "Actions are judged by intentions...",
+                        "Sahih al-Bukhari"
+                    )
+                } else {
+                    Triple(
+                        "Night Supplication",
+                        "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
+                        "In Your name, O Allah, I die and I live."
+                    )
+                }
+
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(112.dp)
+                        .clickable { /* No-op or dynamic detail action */ },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isMorningDua) Icons.Default.WbSunny else Icons.Default.WbTwilight,
+                                contentDescription = null,
+                                tint = if (isMorningDua) Color(0xFFECC27E) else Color(0xFFFF8A65),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = selectedDuaOrHadith.first,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = selectedDuaOrHadith.second,
+                                fontSize = 11.sp,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = selectedDuaOrHadith.third,
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -665,6 +790,23 @@ fun PrayersScreen(
                                     )
                                 )
                             }
+                        }
+                        val subPrayersStr = when (name) {
+                            "Fajr" -> "2 Sunnah (Muakkadah) • 2 Fard"
+                            "Dhuhr" -> "4 Sunnah • 4 Fard • 2 Sunnah • 2 Nafl"
+                            "Asr" -> "4 Sunnah (G. Muakkadah) • 4 Fard"
+                            "Maghrib" -> "3 Fard • 2 Sunnah • 2 Nafl"
+                            "Isha" -> "4 Fard • 2 Sunnah • 2 Nafl • 3 Witr (Wajib) • 2 Nafl"
+                            else -> ""
+                        }
+                        if (subPrayersStr.isNotEmpty()) {
+                            Text(
+                                text = subPrayersStr,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                            )
                         }
                         Text(
                             text = if (time.isNotEmpty()) time else "--:--",
@@ -827,23 +969,34 @@ fun PrayersScreen(
                         )
                     }
 
-                    IconButton(
-                        onClick = {
-                            if (optCompleted) {
-                                viewModel.togglePrayer(optName, false)
-                            } else {
-                                // Instantly log optional prayers
-                                viewModel.togglePrayer(optName, true)
-                                Toast.makeText(context, "$optName Logged successfully!", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
+                    if (isLoggingEnabled) {
+                        IconButton(
+                            onClick = {
+                                if (optCompleted) {
+                                    viewModel.togglePrayer(optName, false)
+                                } else {
+                                    // Instantly log optional prayers
+                                    viewModel.togglePrayer(optName, true)
+                                    Toast.makeText(context, "$optName Logged successfully!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (optCompleted) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                                contentDescription = "Log $optName",
+                                tint = if (optCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    } else {
                         Icon(
-                            imageVector = if (optCompleted) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
-                            contentDescription = "Log $optName",
-                            tint = if (optCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(28.dp)
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "Active Notification Alert",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                            modifier = Modifier
+                                .size(32.dp)
+                                .padding(4.dp)
                         )
                     }
                 }
@@ -2396,11 +2549,13 @@ fun SplashScreen(onTimeout: () -> Unit) {
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface
+                        Color(0xFF0F0B1E), // Vibrant deep space indigo
+                        Color(0xFF04060C), // Deep starry black backdrop
+                        Color(0xFF140D24)  // Mystic dawn accent glow
                     )
                 )
-            ),
+            )
+            .animatedGradientBackground("nebula_live"), // Fluid celestial transition
         contentAlignment = Alignment.Center
     ) {
         // Grand decorative mosque silhouette standing tall at the bottom of the splash screen
@@ -2409,9 +2564,10 @@ fun SplashScreen(onTimeout: () -> Unit) {
                 .fillMaxWidth()
                 .height(220.dp)
                 .align(Alignment.BottomCenter),
-            primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-            secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f),
-            prayerPhase = "isha"
+            primaryColor = Color(0xFFD4AF37).copy(alpha = 0.22f), // Beautiful glowing gold arch
+            secondaryColor = Color(0xFF1DE9B6).copy(alpha = 0.12f), // Soft cyan minaret tip aura
+            prayerPhase = "isha",
+            drawSkyBackground = false // Transparent overlay for a seamless full background
         )
 
         Column(
@@ -2483,12 +2639,32 @@ fun LoginSignupScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
+    val currentTheme by viewModel.currentThemeName.collectAsState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F0B1E), // Deep luxury spiritual indigo
+                        Color(0xFF04060C), // Deep space velvet black
+                        Color(0xFF140D24)  // Mystic dawn amethyst aura
+                    )
+                )
+            )
+            .animatedGradientBackground(currentTheme),
         contentAlignment = Alignment.Center
     ) {
+        // Celestial mosque skyline spanning the entire screen background
+        MosqueDomeAndMinaretBackground(
+            modifier = Modifier.fillMaxSize(),
+            primaryColor = Color(0xFFD4AF37).copy(alpha = 0.15f), // Glowing gold arch
+            secondaryColor = Color(0xFF1DE9B6).copy(alpha = 0.08f), // Soft cyan minaret tip aura
+            prayerPhase = "isha",
+            drawSkyBackground = false // Transparent overlay for seamless background flow
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2895,7 +3071,8 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                         Triple("rose_quartz", "Rose Quartz", Color(0xFFF06292)),
                         Triple("amber_glow", "Amber Glow", Color(0xFFFFB300)),
                         Triple("aurora_live", "Aurora Live", Color(0xFF1DE9B6)),
-                        Triple("nebula_live", "Nebula Live", Color(0xFFE040FB))
+                        Triple("nebula_live", "Nebula Live", Color(0xFFE040FB)),
+                        Triple("ivory_glow", "Ivory Glow", Color(0xFFFFFDD0))
                     ).forEach { (themeId, labelStr, themeColor) ->
                         Box(
                             modifier = Modifier
@@ -3187,12 +3364,38 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                 var selectedPrayerName by remember { mutableStateOf("Fajr") }
                 var customDelayText by remember { mutableStateOf("15") }
 
+                val datePickerCalendar = java.util.Calendar.getInstance()
+                try {
+                    val parsedDate = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(targetDateText)
+                    if (parsedDate != null) {
+                        datePickerCalendar.time = parsedDate
+                    }
+                } catch (e: Exception) {}
+
+                val datePickerDialog = android.app.DatePickerDialog(
+                    context,
+                    { _, year, month, dayOfMonth ->
+                        val mStr = if (month + 1 < 10) "0${month + 1}" else (month + 1).toString()
+                        val dStr = if (dayOfMonth < 10) "0$dayOfMonth" else dayOfMonth.toString()
+                        targetDateText = "$year-$mStr-$dStr"
+                    },
+                    datePickerCalendar.get(java.util.Calendar.YEAR),
+                    datePickerCalendar.get(java.util.Calendar.MONTH),
+                    datePickerCalendar.get(java.util.Calendar.DAY_OF_MONTH)
+                )
+
                 OutlinedTextField(
                     value = targetDateText,
                     onValueChange = { targetDateText = it },
                     label = { Text("Target Date (yyyy-MM-dd)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = { datePickerDialog.show() }) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "Choose target date from calendar")
+                        }
+                    }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -3600,7 +3803,8 @@ fun MosqueDomeAndMinaretBackground(
     modifier: Modifier = Modifier,
     primaryColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
     secondaryColor: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
-    prayerPhase: String = "isha"
+    prayerPhase: String = "isha",
+    drawSkyBackground: Boolean = true
 ) {
     Canvas(modifier = modifier) {
         val w = size.width
@@ -3609,161 +3813,163 @@ fun MosqueDomeAndMinaretBackground(
 
         val phase = prayerPhase.lowercase().trim()
         
-        // 1. Draw glowing gorgeous sky background based on active prayer time
-        val gradientBrush = when {
-            phase.contains("fajr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(Color(0xFF2E1A47), Color(0xFFF07B3F)),
-                startY = 0f,
-                endY = h
-            )
-            phase.contains("dhuhr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(Color(0xFF1E88E5), Color(0xFF90CAF9)),
-                startY = 0f,
-                endY = h
-            )
-            phase.contains("asr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(Color(0xFFFB8C00), Color(0xFFFFD54F)),
-                startY = 0f,
-                endY = h
-            )
-            phase.contains("maghrib") -> androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(Color(0xFF9C27B0), Color(0xFFE91E63)),
-                startY = 0f,
-                endY = h
-            )
-            else -> androidx.compose.ui.graphics.Brush.verticalGradient(
-                colors = listOf(Color(0xFF0F2027), Color(0xFF203A43)),
-                startY = 0f,
-                endY = h
-            )
-        }
-        drawRect(brush = gradientBrush, size = size)
+        if (drawSkyBackground) {
+            // 1. Draw glowing gorgeous sky background based on active prayer time
+            val gradientBrush = when {
+                phase.contains("fajr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0xFF2E1A47), Color(0xFFF07B3F)),
+                    startY = 0f,
+                    endY = h
+                )
+                phase.contains("dhuhr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0xFF1E88E5), Color(0xFF90CAF9)),
+                    startY = 0f,
+                    endY = h
+                )
+                phase.contains("asr") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0xFFFB8C00), Color(0xFFFFD54F)),
+                    startY = 0f,
+                    endY = h
+                )
+                phase.contains("maghrib") -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0xFF9C27B0), Color(0xFFE91E63)),
+                    startY = 0f,
+                    endY = h
+                )
+                else -> androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0F2027), Color(0xFF203A43)),
+                    startY = 0f,
+                    endY = h
+                )
+            }
+            drawRect(brush = gradientBrush, size = size)
 
-        // 2. Draw corresponding astronomical/celestial bodies
-        if (phase.contains("fajr")) {
-            // Draw sunrise: soft glowing sun rising from bottom left
-            val scx = w * 0.20f
-            val scy = h * 0.70f
-            drawCircle(
-                color = Color(0xFFFFF176).copy(alpha = 0.85f),
-                radius = 24f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            drawCircle(
-                color = Color(0xFFFFB74D).copy(alpha = 0.40f),
-                radius = 42f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-        } else if (phase.contains("dhuhr")) {
-            // High noon sun at the absolute head (top center)
-            val scx = w * 0.5f
-            val scy = h * 0.22f
-            drawCircle(
-                color = Color(0xFFFFEB3B),
-                radius = 22f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            drawCircle(
-                color = Color(0xFFFFF59D).copy(alpha = 0.40f),
-                radius = 45f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            // Draw shining high sunrays radiating symmetrically
-            for (i in 0 until 8) {
-                val angle = i * (Math.PI / 4)
-                val startX = scx + Math.cos(angle).toFloat() * 28f
-                val startY = scy + Math.sin(angle).toFloat() * 28f
-                val endX = scx + Math.cos(angle).toFloat() * 46f
-                val endY = scy + Math.sin(angle).toFloat() * 46f
-                drawLine(
-                    color = Color(0xFFFFEB3B).copy(alpha = 0.7f),
-                    start = androidx.compose.ui.geometry.Offset(startX, startY),
-                    end = androidx.compose.ui.geometry.Offset(endX, endY),
-                    strokeWidth = 3.5f
+            // 2. Draw corresponding astronomical/celestial bodies
+            if (phase.contains("fajr")) {
+                // Draw sunrise: soft glowing sun rising from bottom left
+                val scx = w * 0.20f
+                val scy = h * 0.70f
+                drawCircle(
+                    color = Color(0xFFFFF176).copy(alpha = 0.85f),
+                    radius = 24f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
                 )
-            }
-        } else if (phase.contains("asr")) {
-            // Late afternoon golden hour sun settling mid-way towards the right
-            val scx = w * 0.78f
-            val scy = h * 0.40f
-            drawCircle(
-                color = Color(0xFFFFB300),
-                radius = 20f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            drawCircle(
-                color = Color(0xFFFFE082).copy(alpha = 0.35f),
-                radius = 34f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            // Golden warm rays
-            for (i in 0 until 6) {
-                val angle = i * (Math.PI / 3) + (Math.PI / 6)
-                val startX = scx + Math.cos(angle).toFloat() * 25f
-                val startY = scy + Math.sin(angle).toFloat() * 25f
-                val endX = scx + Math.cos(angle).toFloat() * 38f
-                val endY = scy + Math.sin(angle).toFloat() * 38f
-                drawLine(
-                    color = Color(0xFFFFB300).copy(alpha = 0.6f),
-                    start = androidx.compose.ui.geometry.Offset(startX, startY),
-                    end = androidx.compose.ui.geometry.Offset(endX, endY),
-                    strokeWidth = 2.5f
+                drawCircle(
+                    color = Color(0xFFFFB74D).copy(alpha = 0.40f),
+                    radius = 42f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
                 )
-            }
-        } else if (phase.contains("maghrib")) {
-            // Sunset: sun half submerged behind the horizon
-            val scx = w * 0.72f
-            val scy = h * 0.75f
-            drawCircle(
-                color = Color(0xFFFF3D00).copy(alpha = 0.95f),
-                radius = 18f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-            drawCircle(
-                color = Color(0xFFFF8A65).copy(alpha = 0.45f),
-                radius = 30f,
-                center = androidx.compose.ui.geometry.Offset(scx, scy)
-            )
-        } else {
-            // Isha - starry deep night with twinkling stars and glowing crescent moon
-            val stars = listOf(
-                Pair(w * 0.12f, h * 0.18f),
-                Pair(w * 0.22f, h * 0.12f),
-                Pair(w * 0.35f, h * 0.22f),
-                Pair(w * 0.60f, h * 0.10f),
-                Pair(w * 0.76f, h * 0.20f),
-                Pair(w * 0.88f, h * 0.14f)
-            )
-            for ((sx, sy) in stars) {
-                val starPath = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(sx, sy - 3.5f)
-                    quadraticTo(sx, sy, sx + 3.5f, sy)
-                    quadraticTo(sx, sy, sx, sy + 3.5f)
-                    quadraticTo(sx, sy, sx - 3.5f, sy)
-                    quadraticTo(sx, sy, sx, sy - 3.5f)
+            } else if (phase.contains("dhuhr")) {
+                // High noon sun at the absolute head (top center)
+                val scx = w * 0.5f
+                val scy = h * 0.22f
+                drawCircle(
+                    color = Color(0xFFFFEB3B),
+                    radius = 22f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+                drawCircle(
+                    color = Color(0xFFFFF59D).copy(alpha = 0.40f),
+                    radius = 45f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+                // Draw shining high sunrays radiating symmetrically
+                for (i in 0 until 8) {
+                    val angle = i * (Math.PI / 4)
+                    val startX = scx + Math.cos(angle).toFloat() * 28f
+                    val startY = scy + Math.sin(angle).toFloat() * 28f
+                    val endX = scx + Math.cos(angle).toFloat() * 46f
+                    val endY = scy + Math.sin(angle).toFloat() * 46f
+                    drawLine(
+                        color = Color(0xFFFFEB3B).copy(alpha = 0.7f),
+                        start = androidx.compose.ui.geometry.Offset(startX, startY),
+                        end = androidx.compose.ui.geometry.Offset(endX, endY),
+                        strokeWidth = 3.5f
+                    )
+                }
+            } else if (phase.contains("asr")) {
+                // Late afternoon golden hour sun settling mid-way towards the right
+                val scx = w * 0.78f
+                val scy = h * 0.40f
+                drawCircle(
+                    color = Color(0xFFFFB300),
+                    radius = 20f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+                drawCircle(
+                    color = Color(0xFFFFE082).copy(alpha = 0.35f),
+                    radius = 34f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+                // Golden warm rays
+                for (i in 0 until 6) {
+                    val angle = i * (Math.PI / 3) + (Math.PI / 6)
+                    val startX = scx + Math.cos(angle).toFloat() * 25f
+                    val startY = scy + Math.sin(angle).toFloat() * 25f
+                    val endX = scx + Math.cos(angle).toFloat() * 38f
+                    val endY = scy + Math.sin(angle).toFloat() * 38f
+                    drawLine(
+                        color = Color(0xFFFFB300).copy(alpha = 0.6f),
+                        start = androidx.compose.ui.geometry.Offset(startX, startY),
+                        end = androidx.compose.ui.geometry.Offset(endX, endY),
+                        strokeWidth = 2.5f
+                    )
+                }
+            } else if (phase.contains("maghrib")) {
+                // Sunset: sun half submerged behind the horizon
+                val scx = w * 0.72f
+                val scy = h * 0.75f
+                drawCircle(
+                    color = Color(0xFFFF3D00).copy(alpha = 0.95f),
+                    radius = 18f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+                drawCircle(
+                    color = Color(0xFFFF8A65).copy(alpha = 0.45f),
+                    radius = 30f,
+                    center = androidx.compose.ui.geometry.Offset(scx, scy)
+                )
+            } else {
+                // Isha - starry deep night with twinkling stars and glowing crescent moon
+                val stars = listOf(
+                    Pair(w * 0.12f, h * 0.18f),
+                    Pair(w * 0.22f, h * 0.12f),
+                    Pair(w * 0.35f, h * 0.22f),
+                    Pair(w * 0.60f, h * 0.10f),
+                    Pair(w * 0.76f, h * 0.20f),
+                    Pair(w * 0.88f, h * 0.14f)
+                )
+                for ((sx, sy) in stars) {
+                    val starPath = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(sx, sy - 3.5f)
+                        quadraticTo(sx, sy, sx + 3.5f, sy)
+                        quadraticTo(sx, sy, sx, sy + 3.5f)
+                        quadraticTo(sx, sy, sx - 3.5f, sy)
+                        quadraticTo(sx, sy, sx, sy - 3.5f)
+                        close()
+                    }
+                    drawPath(starPath, color = Color.White.copy(alpha = 0.60f))
+                }
+
+                // High-contrast golden crescent moon
+                val mcx = w * 0.82f
+                val mcy = h * 0.28f
+                val mr = 15f
+                val moonPath = androidx.compose.ui.graphics.Path().apply {
+                    addArc(
+                        androidx.compose.ui.geometry.Rect(mcx - mr, mcy - mr, mcx + mr, mcy + mr),
+                        -120f,
+                        240f
+                    )
+                    addArc(
+                        androidx.compose.ui.geometry.Rect(mcx - mr * 0.5f, mcy - mr, mcx + mr * 1.5f, mcy + mr),
+                        120f,
+                        -240f
+                    )
                     close()
                 }
-                drawPath(starPath, color = Color.White.copy(alpha = 0.60f))
+                drawPath(moonPath, color = Color(0xFFFFF9C4).copy(alpha = 0.75f))
             }
-
-            // High-contrast golden crescent moon
-            val mcx = w * 0.82f
-            val mcy = h * 0.28f
-            val mr = 15f
-            val moonPath = androidx.compose.ui.graphics.Path().apply {
-                addArc(
-                    androidx.compose.ui.geometry.Rect(mcx - mr, mcy - mr, mcx + mr, mcy + mr),
-                    -120f,
-                    240f
-                )
-                addArc(
-                    androidx.compose.ui.geometry.Rect(mcx - mr * 0.5f, mcy - mr, mcx + mr * 1.5f, mcy + mr),
-                    120f,
-                    -240f
-                )
-                close()
-            }
-            drawPath(moonPath, color = Color(0xFFFFF9C4).copy(alpha = 0.75f))
         }
 
         // 3. Draw Mosque Skyline over the sky background & elements
