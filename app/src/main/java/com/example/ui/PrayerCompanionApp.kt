@@ -53,6 +53,8 @@ import com.example.ui.theme.animatedGradientBackground
 import com.example.utils.PrayerTimeCalculator
 import com.example.viewmodel.PrayerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -673,7 +675,7 @@ fun PrayersScreen(
         }
 
         // --- HORIZONTAL CALENDAR DATE SELECTOR ---
-        HorizontalDateSelector(selectedDateStr) { dateStr ->
+        HorizontalDateSelector(selectedDateStr, viewModel) { dateStr ->
             viewModel.selectDate(dateStr)
         }
 
@@ -709,6 +711,8 @@ fun PrayersScreen(
                 return ""
             }
         }
+
+        val expandedSubPrayers = remember { mutableStateMapOf<String, Boolean>() }
 
         val prayers = listOf(
             "Fajr" to times.fajr,
@@ -800,13 +804,89 @@ fun PrayersScreen(
                             else -> ""
                         }
                         if (subPrayersStr.isNotEmpty()) {
-                            Text(
-                                text = subPrayersStr,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.85f),
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
-                            )
+                            val isExpanded = expandedSubPrayers[name] == true
+                            Row(
+                                modifier = Modifier
+                                    .padding(top = 2.dp, bottom = 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f))
+                                    .clickable { expandedSubPrayers[name] = !isExpanded }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Sunnah & Nafl",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (isExpanded) "⌃" else "⌄",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = isExpanded,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(top = 6.dp, bottom = 8.dp)
+                                        .fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    val parts = subPrayersStr.split(" • ")
+                                    parts.forEach { part ->
+                                        val isFard = part.contains("Fard")
+                                        val isWitr = part.contains("Witr")
+                                        val isSunnah = part.contains("Sunnah")
+                                        
+                                        val badgeColor = when {
+                                            isFard -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                            isWitr -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f)
+                                            isSunnah -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+                                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                                        }
+                                        val onBadgeColor = when {
+                                            isFard -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            isWitr -> MaterialTheme.colorScheme.onTertiaryContainer
+                                            isSunnah -> MaterialTheme.colorScheme.onSecondaryContainer
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isFard) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary)
+                                            )
+                                            
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(badgeColor)
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = part,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = onBadgeColor,
+                                                    fontWeight = if (isFard) FontWeight.Bold else FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Text(
                             text = if (time.isNotEmpty()) time else "--:--",
@@ -915,10 +995,18 @@ fun PrayersScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         val optionalPrayers = listOf(
-            Triple("Tahajjud", "Tahajjud (Night Vigil): Last third of the night before Fajr", "02:00 - 04:30 AM"),
-            Triple("Ishraq", "Ishraq (Post-Sunrise): 15-20 minutes after Sunrise", "15m after Sunrise"),
-            Triple("Duha", "Duha (Forenoon): Morning prayer before midday transit", "08:30 - 11:30 AM"),
-            Triple("Awabin", "Awabin (Post-Maghrib): Sunset voluntary prayer", "Between Maghrib & Isha")
+            Triple("Tahajjud", "Tahajjud (Night Vigil): High spiritual prayer in the last third of night before Fajr", "02:00 - 04:30 AM"),
+            Triple("Tahiyyatul Wudu", "Tahiyyatul Wudu (Ablution Prayer): 2 Rakahs offered immediately after performing Wudu", "Right after Wudu"),
+            Triple("Tahiyyatul Masjid", "Tahiyyatul Masjid (Mosque Prayer): 2 Rakahs on entering Masjid before sitting down", "On entering Masjid"),
+            Triple("Ishraq", "Ishraq (Post-Sunrise Sunnah): 15-20 minutes after Sunrise for spiritual sunrise reward", "15m after Sunrise"),
+            Triple("Duha", "Duha / Chasht (Forenoon Namaj): Highly rewarded morning voluntary prayer of light", "08:30 - 11:30 AM"),
+            Triple("Chasht", "Chasht (Mid-Morning Namaj): Prayed as the sun climbs high in the sky", "09:30 - 11:30 AM"),
+            Triple("Salatul Tasbih", "Salatul Tasbih (Prayer of Glorification): Special 4 Rakahs with repeated Tasbihs", "Universal recommended times"),
+            Triple("Salatul Hajat", "Salatul Hajat (Prayer of Need): Prayed to ask special help/wish from Allah in times of need", "Anytime in need"),
+            Triple("Salatul Istikhara", "Salatul Istikhara (Prayer of Guidance): Prayed when seeking path / decision advice from Allah", "Anytime, ideally night"),
+            Triple("Salatul Tawbah", "Salatul Tawbah (Prayer of Repentance): Offered to seek sincere remorse and forgiveness for sins", "Immediately after sin"),
+            Triple("Awabin", "Awabin (Post-Maghrib): 6 Rakahs of sunnah prayer between Maghrib and Isha", "Between Maghrib & Isha"),
+            Triple("Salatul Kusuf", "Salatul Kusuf / Khusuf (Eclipse Prayer): Prayed during Solar or Lunar Eclipse", "During Eclipse")
         )
 
         optionalPrayers.forEach { (optName, optDesc, optRecommendedTime) ->
@@ -1133,22 +1221,41 @@ fun PrayersScreen(
             }
         }
     }
-
-    // Legacy config dialog removed in favor of first-class Settings tab screen
-
 }
 
 @Composable
-fun HorizontalDateSelector(selectedDateStr: String, onDateSelected: (String) -> Unit) {
+fun HorizontalDateSelector(
+    selectedDateStr: String,
+    viewModel: PrayerViewModel,
+    onDateSelected: (String) -> Unit
+) {
     val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     val formatDay = SimpleDateFormat("EEE", Locale.getDefault())
     val formatDateOnly = SimpleDateFormat("dd", Locale.getDefault())
-    
-    // Generates a list of 7 dates (6 in past, today)
-    val dates = remember {
+    val formatMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+
+    val todayStr = remember { format.format(Date()) }
+    val allLogs by viewModel.allPrayerLogs.collectAsState()
+
+    var focusDate by remember {
+        val d = try { format.parse(selectedDateStr) ?: Date() } catch(e: Exception) { Date() }
+        mutableStateOf(d)
+    }
+
+    LaunchedEffect(selectedDateStr) {
+        try {
+            val d = format.parse(selectedDateStr)
+            if (d != null) {
+                focusDate = d
+            }
+        } catch (_: Exception) {}
+    }
+
+    val dates = remember(focusDate) {
         val list = mutableListOf<Date>()
         val cal = Calendar.getInstance()
-        cal.add(Calendar.DATE, -6)
+        cal.time = focusDate
+        cal.add(Calendar.DATE, -3)
         for (i in 0..6) {
             list.add(cal.time)
             cal.add(Calendar.DATE, 1)
@@ -1156,52 +1263,412 @@ fun HorizontalDateSelector(selectedDateStr: String, onDateSelected: (String) -> 
         list
     }
 
-    Column {
-        Text(
-            text = "Real-Time Day Tracker",
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
-        )
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            items(dates) { date ->
-                val dateStr = format.format(date)
-                val dayStr = formatDay.format(date)
-                val dayNum = formatDateOnly.format(date)
-                val isSelected = dateStr == selectedDateStr
+    var showMonthDialog by remember { mutableStateOf(false) }
 
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                        .clickable { onDateSelected(dateStr) }
-                        .padding(vertical = 12.dp, horizontal = 14.dp)
-                        .widthIn(min = 36.dp),
-                    contentAlignment = Alignment.Center
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Habit Calendar Tracker",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = try { formatMonthYear.format(focusDate) } catch (e: Exception) { "" },
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = {
+                        val tStr = format.format(Date())
+                        onDateSelected(tStr)
+                        focusDate = Date()
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Today", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                IconButton(
+                    onClick = { showMonthDialog = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = "Interactive Monthly Habit Calendar",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = focusDate
+                    cal.add(Calendar.DATE, -3)
+                    focusDate = cal.time
+                },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = "Previous Days",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items(dates) { date ->
+                    val dateStr = format.format(date)
+                    val dayStr = formatDay.format(date)
+                    val dayNum = formatDateOnly.format(date)
+                    val isSelected = dateStr == selectedDateStr
+                    val isToday = dateStr == todayStr
+
+                    val completedCount = allLogs.filter { it.date == dateStr && it.completed }.size
+
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primary
+                                else if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            )
+                            .border(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary
+                                else if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                else Color.Transparent,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                onDateSelected(dateStr)
+                                focusDate = date
+                            }
+                            .padding(vertical = 8.dp, horizontal = 10.dp)
+                            .widthIn(min = 34.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = dayStr.uppercase(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = dayNum,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (completedCount > 0) {
+                                    val dotColor = if (completedCount >= 5) Color(0xFF2E7D32) else Color(0xFFEF6C00)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(5.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else dotColor)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(5.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Transparent)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            IconButton(
+                onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = focusDate
+                    cal.add(Calendar.DATE, 3)
+                    focusDate = cal.time
+                },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Next Days",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+
+    if (showMonthDialog) {
+        MonthlyHabitCalendarDialog(
+            selectedDateStr = selectedDateStr,
+            allLogs = allLogs,
+            onDismiss = { showMonthDialog = false },
+            onDateSelected = { dateStr ->
+                onDateSelected(dateStr)
+                try {
+                    format.parse(dateStr)?.let { focusDate = it }
+                } catch(_: Exception) {}
+                showMonthDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun MonthlyHabitCalendarDialog(
+    selectedDateStr: String,
+    allLogs: List<PrayerLog>,
+    onDismiss: () -> Unit,
+    onDateSelected: (String) -> Unit
+) {
+    val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val formatMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+    val todayStr = remember { format.format(Date()) }
+
+    var monthCal by remember {
+        val cal = Calendar.getInstance()
+        try {
+            format.parse(selectedDateStr)?.let { cal.time = it }
+        } catch (_: Exception) {}
+        mutableStateOf(cal)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            val newCal = Calendar.getInstance().apply {
+                                time = monthCal.time
+                                add(Calendar.MONTH, -1)
+                            }
+                            monthCal = newCal
+                        }
+                    ) {
+                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous Month")
+                    }
+
+                    Text(
+                        text = formatMonthYear.format(monthCal.time),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    IconButton(
+                        onClick = {
+                            val newCal = Calendar.getInstance().apply {
+                                time = monthCal.time
+                                add(Calendar.MONTH, 1)
+                            }
+                            monthCal = newCal
+                        }
+                    ) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Next Month")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val daysOfWeekNames = listOf("M", "T", "W", "T", "F", "S", "S")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    daysOfWeekNames.forEach { name ->
                         Text(
-                            text = dayStr.uppercase(),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = dayNum,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            text = name,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val daysGrid = remember(monthCal) {
+                    val gridList = mutableListOf<Date?>()
+                    val cal = Calendar.getInstance()
+                    cal.time = monthCal.time
+                    cal.set(Calendar.DAY_OF_MONTH, 1)
+                    
+                    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+                    val prefixEmptyCells = if (firstDayOfWeek == Calendar.SUNDAY) 6 else firstDayOfWeek - 2
+
+                    for (i in 0 until prefixEmptyCells) {
+                        gridList.add(null)
+                    }
+
+                    val totalDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    for (i in 1..totalDays) {
+                        cal.set(Calendar.DAY_OF_MONTH, i)
+                        gridList.add(cal.time)
+                    }
+                    
+                    while (gridList.size % 7 != 0) {
+                        gridList.add(null)
+                    }
+                    gridList
+                }
+
+                val rows = daysGrid.chunked(7)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rows.forEach { rowDays ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            rowDays.forEach { date ->
+                                if (date != null) {
+                                    val dateStr = format.format(date)
+                                    val isSelected = dateStr == selectedDateStr
+                                    val isToday = dateStr == todayStr
+
+                                    val cal = Calendar.getInstance()
+                                    cal.time = date
+                                    val dayNum = cal.get(Calendar.DAY_OF_MONTH).toString()
+
+                                    val completedCount = allLogs.filter { it.date == dateStr && it.completed }.size
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(1f)
+                                            .padding(2.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primary
+                                                else if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                                else Color.Transparent
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) MaterialTheme.colorScheme.primary
+                                                else if (isToday) MaterialTheme.colorScheme.primary
+                                                else Color.Transparent,
+                                                CircleShape
+                                            )
+                                            .clickable { onDateSelected(dateStr) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = dayNum,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (isSelected || isToday) FontWeight.Black else FontWeight.Medium,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                        else if (isToday) MaterialTheme.colorScheme.onPrimaryContainer
+                                                        else MaterialTheme.colorScheme.onSurface,
+                                                fontSize = 12.sp
+                                            )
+                                            
+                                            if (completedCount > 0) {
+                                                val dotColor = if (completedCount >= 5) Color(0xFF2E7D32) else Color(0xFFEF6C00)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .padding(top = 2.dp)
+                                                        .size(4.dp)
+                                                        .clip(CircleShape)
+                                                        .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else dotColor)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Habit Tracking Index",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF2E7D32)))
+                        Text("5/5 Logged (Fard completed)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF6C00)))
+                        Text("1-4 Logged", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Close", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -2636,6 +3103,9 @@ fun LoginSignupScreen(
     var isSignUpMode by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
+    val coroutineScope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(false) }
+
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
@@ -2706,6 +3176,7 @@ fun LoginSignupScreen(
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Name") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
+                            enabled = !isLoading,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Next
                             )
@@ -2720,6 +3191,7 @@ fun LoginSignupScreen(
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        enabled = !isLoading,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
@@ -2734,6 +3206,7 @@ fun LoginSignupScreen(
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        enabled = !isLoading,
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = if (isSignUpMode) ImeAction.Done else ImeAction.Done
@@ -2765,7 +3238,7 @@ fun LoginSignupScreen(
                             Card(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable { trackingModeSelection = true }
+                                    .clickable(enabled = !isLoading) { trackingModeSelection = true }
                                     .border(
                                         1.5.dp,
                                         if (trackingModeSelection) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -2808,7 +3281,7 @@ fun LoginSignupScreen(
                             Card(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable { trackingModeSelection = false }
+                                    .clickable(enabled = !isLoading) { trackingModeSelection = false }
                                     .border(
                                         1.5.dp,
                                         if (!trackingModeSelection) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -2858,6 +3331,7 @@ fun LoginSignupScreen(
 
                     Button(
                         onClick = {
+                            if (isLoading) return@Button
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             if (email.isEmpty() || password.isEmpty() || (isSignUpMode && username.isEmpty())) {
@@ -2873,39 +3347,71 @@ fun LoginSignupScreen(
                                 return@Button
                             }
 
-                            if (isSignUpMode) {
-                                val signupSuccess = viewModel.signUpUser(username, email, password, trackingModeSelection)
-                                if (signupSuccess) {
-                                    onAuthSuccess()
-                                } else {
-                                    errorMsg = "An account with this email already exists."
-                                }
-                            } else {
-                                val loginError = viewModel.loginUser(email, password)
-                                if (loginError == null) {
-                                    onAuthSuccess()
-                                } else {
-                                    errorMsg = loginError
+                            coroutineScope.launch {
+                                isLoading = true
+                                errorMsg = null
+                                try {
+                                    if (isSignUpMode) {
+                                        val signupSuccess = viewModel.signUpUser(username, email, password, trackingModeSelection)
+                                        if (signupSuccess) {
+                                            onAuthSuccess()
+                                        } else {
+                                            errorMsg = "An account with this email already exists."
+                                        }
+                                    } else {
+                                        val loginError = viewModel.loginUser(email, password)
+                                        if (loginError == null) {
+                                            onAuthSuccess()
+                                        } else {
+                                            errorMsg = loginError
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    errorMsg = "Sync failure: ${e.localizedMessage ?: "Network issue"}"
+                                } finally {
+                                    isLoading = false
                                 }
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isLoading
                     ) {
-                        Text(if (isSignUpMode) "Register" else "Enter", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        if (isLoading) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Text(
+                                    text = if (isSignUpMode) "Registering & Syncing..." else "Syncing Noor Cloud...",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        } else {
+                            Text(if (isSignUpMode) "Register" else "Enter", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    TextButton(onClick = {
-                        isSignUpMode = !isSignUpMode
-                        errorMsg = null
-                    }) {
+                    TextButton(
+                        onClick = {
+                            isSignUpMode = !isSignUpMode
+                            errorMsg = null
+                        },
+                        enabled = !isLoading
+                    ) {
                         Text(
                             text = if (isSignUpMode) "Already have an account? Sign In" else "New to Noor? Create Account",
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (isLoading) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -3072,7 +3578,8 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                         Triple("amber_glow", "Amber Glow", Color(0xFFFFB300)),
                         Triple("aurora_live", "Aurora Live", Color(0xFF1DE9B6)),
                         Triple("nebula_live", "Nebula Live", Color(0xFFE040FB)),
-                        Triple("ivory_glow", "Ivory Glow", Color(0xFFFFFDD0))
+                        Triple("ivory_glow", "Ivory Glow", Color(0xFFFFFDD0)),
+                        Triple("celestial_dusk", "Celestial Dusk", Color(0xFFB388FF))
                     ).forEach { (themeId, labelStr, themeColor) ->
                         Box(
                             modifier = Modifier
@@ -3107,149 +3614,6 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
                                     fontWeight = FontWeight.Bold,
                                     color = if (currentTheme == themeId) themeColor else MaterialTheme.colorScheme.onSurface
                                 )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- 2. ADHAN OFFSETS CARD ---
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.Tune, contentDescription = "Offsets Icon", tint = MaterialTheme.colorScheme.primary)
-                    Column {
-                        Text(
-                            text = "Calibrate Adhan Timings",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Manually offset calculation results in minutes",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-
-                listOf(
-                    "Fajr" to fOff,
-                    "Sunrise" to sOff,
-                    "Dhuhr" to dOff,
-                    "Asr" to aOff,
-                    "Maghrib" to mOff,
-                    "Isha" to iOff
-                ).forEach { item ->
-                    val pName = item.first
-                    val curVal = item.second
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(pName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { viewModel.updatePrayerOffset(pName, curVal - 1) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.Remove, contentDescription = "Decrease $pName Offset", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                            }
-                            Text(
-                                text = "${if (curVal > 0) "+" else ""}$curVal m",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(60.dp),
-                                textAlign = TextAlign.Center,
-                                color = if (curVal != 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            IconButton(
-                                onClick = { viewModel.updatePrayerOffset(pName, curVal + 1) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Increase $pName Offset", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- 3. IQAMAH DELAYS CARD ---
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.Timer, contentDescription = "Queue Icon", tint = MaterialTheme.colorScheme.secondary)
-                    Column {
-                        Text(
-                            text = "Congregational Queue Delays",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Set congregational gap (minutes after Adhan) for countdowns",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-
-                listOf(
-                    "Fajr" to fDelay,
-                    "Dhuhr" to dDelay,
-                    "Asr" to aDelay,
-                    "Maghrib" to mDelay,
-                    "Isha" to iDelay
-                ).forEach { item ->
-                    val pName = item.first
-                    val curVal = item.second
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("$pName Queue Time", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { viewModel.updateIqamahDelay(pName, maxOf(0, curVal - 1)) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.Remove, contentDescription = "Decrease $pName Queue", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
-                            }
-                            Text(
-                                text = "$curVal m",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(60.dp),
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            IconButton(
-                                onClick = { viewModel.updateIqamahDelay(pName, curVal + 1) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Increase $pName Queue", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.secondary)
                             }
                         }
                     }

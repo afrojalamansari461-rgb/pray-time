@@ -86,12 +86,23 @@ class PrayerViewModel(
         loggedInEmail.value = email
     }
 
-    fun signUpUser(username: String, email: String, passwordSecured: String, isLoggingEnabledInput: Boolean): Boolean {
+    suspend fun signUpUser(username: String, email: String, passwordSecured: String, isLoggingEnabledInput: Boolean): Boolean {
         val normalizedEmail = email.lowercase().trim()
         val trimmedPassword = passwordSecured.trim()
         if (prefs.getBoolean("reg_exists_$normalizedEmail", false)) {
             return false // Already exists
         }
+
+        // Upload new user credentials safely to the Secure Al-Noor Cloud Database
+        com.example.data.CloudSyncManager.uploadProfile(
+            username = username.trim(),
+            email = normalizedEmail,
+            passwordSecured = trimmedPassword,
+            isLoggingEnabled = isLoggingEnabledInput,
+            address = "",
+            selectedTheme = currentThemeName.value
+        )
+
         prefs.edit().apply {
             putBoolean("reg_exists_$normalizedEmail", true)
             putString("reg_name_$normalizedEmail", username.trim())
@@ -149,10 +160,30 @@ class PrayerViewModel(
         return Pair(28.6139, 77.2090)
     }
 
-    fun loginUser(email: String, passwordSecured: String): String? {
+    suspend fun loginUser(email: String, passwordSecured: String): String? {
         val normalizedEmail = email.lowercase().trim()
         val trimmedPassword = passwordSecured.trim()
-        val exists = prefs.getBoolean("reg_exists_$normalizedEmail", false)
+        var exists = prefs.getBoolean("reg_exists_$normalizedEmail", false)
+        
+        // If the profile does not exist locally (e.g. logging into a new device), check Secure Al-Noor Cloud
+        if (!exists) {
+            val cloudProfile = com.example.data.CloudSyncManager.downloadProfileByEmail(normalizedEmail)
+            if (cloudProfile != null) {
+                prefs.edit().apply {
+                    putBoolean("reg_exists_$normalizedEmail", true)
+                    putString("reg_name_$normalizedEmail", cloudProfile.username)
+                    putString("reg_pwd_$normalizedEmail", cloudProfile.passwordSecured)
+                    putBoolean("reg_logging_enabled_$normalizedEmail", cloudProfile.isLoggingEnabled)
+                    putString("reg_address_$normalizedEmail", cloudProfile.address)
+                    putString("selected_theme", cloudProfile.selectedTheme)
+                    commit()
+                }
+                currentThemeName.value = cloudProfile.selectedTheme
+                exists = true
+                Log.d("PrayerViewModel", "Successfully synced user account profile from Al-Noor Cloud: $normalizedEmail")
+            }
+        }
+
         if (!exists) {
             return "No account found. Check email or Create Account."
         }
@@ -186,6 +217,16 @@ class PrayerViewModel(
             // Use fallback or current GPS default
             updateLocation(latitude.value, longitude.value, locationLabel.value)
         }
+
+        // Also update latest settings to Cloud asynchronously
+        com.example.data.CloudSyncManager.uploadProfile(
+            username = storedName,
+            email = normalizedEmail,
+            passwordSecured = trimmedPassword,
+            isLoggingEnabled = storedLoggingEnabled,
+            address = storedAddress,
+            selectedTheme = currentThemeName.value
+        )
 
         return null // success
     }

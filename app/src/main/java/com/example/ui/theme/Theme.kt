@@ -211,9 +211,26 @@ private val IvoryColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF29261E)
 )
 
+private val CelestialDuskColorScheme = darkColorScheme(
+    primary = Color(0xFFB388FF), // Vivid electric lavender-indigo
+    onPrimary = Color(0xFF1B0047),
+    primaryContainer = Color(0xFF311B92), // Deep purple container
+    onPrimaryContainer = Color(0xFFEDE7F6),
+    secondary = Color(0xFFFF7043), // Radiant Sunset Coral
+    tertiary = Color(0xFFD4AF37), // Islamic Gold Accent
+    background = Color(0xFF090514), // Deep velvet astronomical night
+    surface = Color(0xFF140D24), // Mystical lavender-shadowed surface
+    onBackground = Color(0xFFF3E5F5), // Luminous lilac white
+    onSurface = Color(0xFFF3E5F5),
+    surfaceVariant = Color(0xFF2A1B40),
+    onSurfaceVariant = Color(0xFFE1BEE7),
+    outline = Color(0xFFB388FF),
+    outlineVariant = Color(0xFF1D0F33)
+)
+
 @Composable
 fun Modifier.animatedGradientBackground(themeName: String): Modifier {
-    if (themeName != "aurora_live" && themeName != "nebula_live" && themeName != "ivory_glow") return this
+    if (themeName != "aurora_live" && themeName != "nebula_live" && themeName != "ivory_glow" && themeName != "celestial_dusk") return this
     val infiniteTransition = rememberInfiniteTransition(label = "bgSweep")
     val animProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -229,21 +246,25 @@ fun Modifier.animatedGradientBackground(themeName: String): Modifier {
         val color1 = when (themeName) {
             "aurora_live" -> Color(0xFF050B09)
             "ivory_glow" -> Color(0xFF100F0C)
+            "celestial_dusk" -> Color(0xFF06030D)
             else -> Color(0xFF090410)
         }
         val accent1 = when (themeName) {
             "aurora_live" -> Color(0xFF1DE9B6).copy(alpha = 0.14f * animProgress)
             "ivory_glow" -> Color(0xFFFFFDD0).copy(alpha = 0.16f * animProgress)
+            "celestial_dusk" -> Color(0xFFB388FF).copy(alpha = 0.15f * animProgress)
             else -> Color(0xFFE040FB).copy(alpha = 0.15f * animProgress)
         }
         val accent2 = when (themeName) {
             "aurora_live" -> Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
             "ivory_glow" -> Color(0xFFE9E4CB).copy(alpha = 0.12f * (1f - animProgress))
+            "celestial_dusk" -> Color(0xFFFF7043).copy(alpha = 0.14f * (1f - animProgress))
             else -> Color(0xFF00E5FF).copy(alpha = 0.12f * (1f - animProgress))
         }
         val accent3 = when (themeName) {
             "aurora_live" -> Color(0xFF00ACC1).copy(alpha = 0.08f * animProgress)
             "ivory_glow" -> Color(0xFFF5F2D0).copy(alpha = 0.09f * animProgress)
+            "celestial_dusk" -> Color(0xFFD4AF37).copy(alpha = 0.10f * animProgress)
             else -> Color(0xFFFF4081).copy(alpha = 0.09f * animProgress)
         }
 
@@ -284,6 +305,7 @@ fun MyApplicationTheme(
     "aurora_live" -> AuroraColorScheme
     "nebula_live" -> NebulaColorScheme
     "ivory_glow" -> IvoryColorScheme
+    "celestial_dusk" -> CelestialDuskColorScheme
     else -> DarkColorScheme
   }
 
