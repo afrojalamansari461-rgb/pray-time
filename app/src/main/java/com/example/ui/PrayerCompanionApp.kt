@@ -22,6 +22,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -219,6 +222,18 @@ fun PrayersScreen(
 
     var logDialogState by remember { mutableStateOf<String?>(null) } // holds name of prayer being detailed
 
+    var tasbihCount by rememberSaveable { mutableStateOf(0) }
+    var tasbihTarget by rememberSaveable { mutableStateOf(33) } // 33, 99, 100, or 0 (Infinite)
+    val tasbihPhrases = listOf(
+        Triple("Subhanallah", "سُبْحَانَ ٱللَّهِ", "Glory be to Allah"),
+        Triple("Alhamdulillah", "ٱلْحَمْدُ لِلَّهِ", "Praise be to Allah"),
+        Triple("Allahu Akbar", "ٱللَّهُ أَكْبَرُ", "Allah is the Greatest"),
+        Triple("Astaghfirullah", "أَسْتَغْفِرُ ٱللَّهَ", "I seek forgiveness from Allah"),
+        Triple("Subhanallahi wa bihamdihi", "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ", "Glory and praise be to Allah"),
+        Triple("La ilaha illallah", "لَا إِلَٰهَ إِلَّا ٱللَّهُ", "There is no deity but Allah")
+    )
+    var selectedPhraseIndex by rememberSaveable { mutableStateOf(0) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -226,7 +241,7 @@ fun PrayersScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // --- NOOR BRANDING HEADER ROW (Elegant Dark style) ---
+        // --- AFAH BRANDING HEADER ROW (Elegant Dark style) ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -236,7 +251,7 @@ fun PrayersScreen(
         ) {
             Column {
                 Text(
-                    text = "Noor",
+                    text = "Afah",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary, // #D0BCFF
@@ -972,6 +987,283 @@ fun PrayersScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // --- DIGITAL TASBIH CARD ---
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("digital_tasbih_card"),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        ) {
+            val haptic = LocalHapticFeedback.current
+            val currentPhrase = tasbihPhrases[selectedPhraseIndex]
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header of Tasbih
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Adjust,
+                            contentDescription = "Tasbih Icon",
+                            tint = Color(0xFFD4AF37),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Interactive Digital Tasbih",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    // Reset Button
+                    IconButton(
+                        onClick = {
+                            tasbihCount = 0
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Reset Tasbih",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Phase Phrase Selector/Display
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    var expandedMenu by remember { mutableStateOf(false) }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedMenu = true }
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentPhrase.first,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = currentPhrase.third,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = currentPhrase.second,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFFD4AF37)
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Change",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = expandedMenu,
+                            onDismissRequest = { expandedMenu = false },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            tasbihPhrases.forEachIndexed { idx, item ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(item.first, fontWeight = FontWeight.Bold)
+                                                Text(item.third, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Spacer(modifier = Modifier.width(24.dp))
+                                            Text(item.second, color = Color(0xFFD4AF37), fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedPhraseIndex = idx
+                                        expandedMenu = false
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Target Limit Selector (33, 99, 100, Free Mode)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val listTargets = listOf(
+                        33 to "33 Limit",
+                        99 to "99 Limit",
+                        100 to "100 Limit",
+                        0 to "Free Mode"
+                    )
+                    listTargets.forEach { (target, label) ->
+                        val isSelected = tasbihTarget == target
+                        OutlinedButton(
+                            onClick = {
+                                tasbihTarget = target
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            modifier = Modifier.height(32.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Radial Progress Medallion + Big Tap Finger Button
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                        .border(
+                            2.dp,
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    Color(0xFFD4AF37)
+                                )
+                            ),
+                            CircleShape
+                        )
+                        .clickable {
+                            val nextCount = tasbihCount + 1
+                            if (tasbihTarget > 0 && nextCount >= tasbihTarget) {
+                                tasbihCount = tasbihTarget
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                Toast.makeText(context, "Completed! Praise be to Allah.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                tasbihCount = nextCount
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+                        .testTag("tasbih_counter_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Draw a subtle animated progress arc
+                    Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                        val angle = if (tasbihTarget > 0) {
+                            (tasbihCount.toFloat() / tasbihTarget.toFloat()) * 360f
+                        } else {
+                            (tasbihCount % 33 / 33f) * 360f
+                        }
+                        drawArc(
+                            color = Color(0xFFD4AF37).copy(alpha = 0.15f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            style = Stroke(width = 4.dp.toPx())
+                        )
+                        drawArc(
+                            color = Color(0xFFD4AF37),
+                            startAngle = -90f,
+                            sweepAngle = angle,
+                            useCenter = false,
+                            style = Stroke(width = 6.dp.toPx())
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (tasbihTarget > 0) "$tasbihCount / $tasbihTarget" else "$tasbihCount",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.TouchApp,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "TAP",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
@@ -2864,7 +3156,7 @@ private fun triggerFileShare(context: Context, backupFile: File) {
 }
 
 @Composable
-fun NoorAppLogo(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 100.dp) {
+fun AfahAppLogo(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 100.dp) {
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
@@ -3042,10 +3334,10 @@ fun SplashScreen(onTimeout: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(24.dp)
         ) {
-            NoorAppLogo(size = 140.dp)
+            AfahAppLogo(size = 140.dp)
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "NOOR",
+                text = "AFAH",
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -3143,10 +3435,10 @@ fun LoginSignupScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            NoorAppLogo(size = 90.dp)
+            AfahAppLogo(size = 90.dp)
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = if (isSignUpMode) "Create Account" else "Sign In to Noor",
+                text = if (isSignUpMode) "Create Account" else "Sign In to Afah",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -3366,8 +3658,8 @@ fun LoginSignupScreen(
                                             errorMsg = loginError
                                         }
                                     }
-                                } catch (e: Exception) {
-                                    errorMsg = "Sync failure: ${e.localizedMessage ?: "Network issue"}"
+                                } catch (e: Throwable) {
+                                    errorMsg = "Sync failure: ${e.localizedMessage ?: "Network or internal issue"}"
                                 } finally {
                                     isLoading = false
                                 }
@@ -3390,7 +3682,7 @@ fun LoginSignupScreen(
                                     strokeWidth = 2.dp
                                 )
                                 Text(
-                                    text = if (isSignUpMode) "Registering & Syncing..." else "Syncing Noor Cloud...",
+                                    text = if (isSignUpMode) "Registering & Syncing..." else "Syncing Afah Cloud...",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
@@ -3410,7 +3702,7 @@ fun LoginSignupScreen(
                         enabled = !isLoading
                     ) {
                         Text(
-                            text = if (isSignUpMode) "Already have an account? Sign In" else "New to Noor? Create Account",
+                            text = if (isSignUpMode) "Already have an account? Sign In" else "New to Afah? Create Account",
                             color = if (isLoading) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary
                         )
                     }
@@ -3530,7 +3822,7 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(
-                    text = "Noor Settings",
+                    text = "Afah Settings",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -4106,7 +4398,7 @@ fun SettingsScreen(viewModel: PrayerViewModel, onBack: () -> Unit) {
         Spacer(modifier = Modifier.height(12.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         Text(
-            text = "Islamic Companion • Noor v1.3\nDevised with absolute reverence, 2026",
+            text = "Islamic Companion • Afah v1.3\nDevised with absolute reverence, 2026",
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFFD4AF37),
             fontWeight = FontWeight.Medium,

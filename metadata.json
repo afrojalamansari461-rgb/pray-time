@@ -1,6 +1,6 @@
 {
-  "name": "Noor",
-  "description": "Noor is an elegant, premium Islamic prayer companion app designed for believers in India and around the world. Developed by Afroj, it features real-time offline prayer trackers, dynamic theme choice accents, instant India-wide location georeferencing, custom vector Qibla finder compass needles, and a beautiful secure onboarding portal.",
+  "name": "Afah",
+  "description": "Afah is an elegant, premium Islamic prayer companion app designed for believers in India and around the world. Developed by Afroj, it features real-time offline prayer trackers, dynamic theme choice accents, instant India-wide location georeferencing, custom vector Qibla finder compass needles, and a beautiful secure onboarding portal.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -174,7 +174,11 @@ object AlarmScheduler {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        if (alarmManager == null) {
+            Log.w(TAG, "AlarmManager is not available on this platform")
+            return
+        }
         
         val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
@@ -224,17 +228,8 @@ object AlarmScheduler {
                     )
                 }
             } catch (ex: Throwable) {
-                try {
-                    alarmManager.set(
-                        AlarmManager.RTC_WAKEUP,
-                        scheduledTimeMillis,
-                        pendingIntent
-                    )
-                } catch (err: Throwable) {
-                    Log.e(TAG, "Failed to schedule alarm even with fallback: ${err.message}")
-                }
+                Log.e(TAG, "Fallback alarm scheduling also failed: ${ex.message}", ex)
             }
-            Log.w(TAG, "Exception handled - fell back to alternative alarm setting: ${e.message}")
         }
 
         // Also schedule daily general reminder at 9 PM (21:00) to log stats
@@ -264,8 +259,8 @@ object AlarmScheduler {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.setInexactRepeating(
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.setInexactRepeating(
                 AlarmManager.RTC_WAKEUP,
                 calendar.timeInMillis,
                 AlarmManager.INTERVAL_DAY,

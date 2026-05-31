@@ -38,7 +38,7 @@ interface CloudSyncApi {
 
 object CloudSyncManager {
     private const val TAG = "CloudSyncManager"
-    private const val BUCKET_NAME = "noor_cloud_sync_bucket_2026_v23"
+    private const val BUCKET_NAME = "afah_cloud_sync_bucket_2026_v23"
     private const val BASE_URL = "https://kvdb.io/$BUCKET_NAME/"
 
     private val moshi = Moshi.Builder()
@@ -68,7 +68,7 @@ object CloudSyncManager {
     }
 
     /**
-     * Synchronizes a local user account profile to the Secure Al-Noor Cloud Database.
+     * Synchronizes a local user account profile to the Secure Al-Afah Cloud Database.
      */
     suspend fun uploadProfile(
         username: String,
@@ -103,7 +103,7 @@ object CloudSyncManager {
     }
 
     /**
-     * Downloads and returns a user profile from the Secure Al-Noor Cloud Database by email.
+     * Downloads and returns a user profile from the Secure Al-Afah Cloud Database by email.
      */
     suspend fun downloadProfileByEmail(email: String): UserProfileJson? = withContext(Dispatchers.IO) {
         try {
